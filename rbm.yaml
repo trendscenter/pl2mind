@@ -10,7 +10,7 @@
         dataset_name: 'smri',
 #        reprocess: True,
     },
-    model: !obj:pylearn2.models.dbm.DBM {
+    model: !obj:pylearn2.models.dbm.RBM {
         batch_size: 4,
         niter: 1,
         visible_layer: !obj:pylearn2.models.dbm.GaussianVisLayer {
@@ -21,18 +21,18 @@
             # about correct from the start and helps speed up learning.
 #            bias_from_marginals: *train,
         },
-        hidden_layers: [
+        hidden_layer: 
             !obj:pylearn2.models.dbm.BinaryVectorMaxPool {
                 layer_name: 'h',
                 detector_layer_dim: 64,
                 pool_size: 1,
+                center: True,
                 # We initialize the weights by drawing them from W_ij ~ U(-irange, irange)
                 irange: .05,
                 # We initialize all the biases of the hidden units to a negative
                 # number. This helps to learn a sparse representation.
                 init_bias: -2.,
             }
-       ]
     },
      algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
                train_iteration_mode: 'even_batchwise_shuffled_sequential',
