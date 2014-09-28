@@ -7,14 +7,14 @@
         center: True,
         variance_normalize: True,
         apply_mask: True,
-        dataset_name: 'smri',
+        dataset_name: 'aod',
 #        reprocess: True,
     },
     model: !obj:pylearn2.models.dbm.RBM {
         batch_size: 4,
         niter: 1,
         visible_layer: !obj:pylearn2.models.dbm.GaussianVisLayer {
-            nvis: 63452,
+            nvis: 70896,
             # We can initialize the biases of the visible units
             # so that sigmoid(b_i) = E[v_i] where the expectation
             # is taken over the dataset. This should get the biases
@@ -36,7 +36,7 @@
     },
      algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
                train_iteration_mode: 'even_batchwise_shuffled_sequential',
-               learning_rate: 1e-3,
+               learning_rate: 0.08,
                learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
                    init_momentum: 0.5,
                },
@@ -47,17 +47,17 @@
                    center: True,
                    variance_normalize: True,
                    apply_mask: True,
-                   dataset_name: 'smri',
+                   dataset_name: 'aod',
 #                   reprocess: True,
                },
                cost : !obj:pylearn2.costs.cost.SumOfCosts {
                 costs: [
-                        !obj:pylearn2.costs.dbm.VariationalPCD {
+                        !obj:pylearn2.costs.dbm.VariationalCD {
                            num_chains: 1,
                            num_gibbs_steps: 1
                         },
                         !obj:pylearn2.costs.dbm.L1WeightDecay {
-                          coeffs: [ 0.01  ]
+                          coeffs: [ 0.1  ]
                         },
                        ],
            },
