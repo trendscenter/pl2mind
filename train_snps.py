@@ -23,7 +23,7 @@ def train(yaml_file, save_path):
     dim = data.shape[1]
     del data
 
-    yaml = open("%s" % yaml_file , "r").read()
+    yaml = open(yaml_file , "r").read()
     hyperparams = {'nvis': dim,
                    'dim_h0': 20,
                    'dim_h1': 100,
