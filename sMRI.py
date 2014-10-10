@@ -38,6 +38,8 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
             assert which_set == 'test'
             data_path = p + 'test.h5'
 
+        # Dummy file is for tests, don't want to resave over data we might actually be
+        # using every time we run a test.
         if save_dummy:
             data_path = "".join(data_path.split(".")[0] + '_dummy.h5')
 
