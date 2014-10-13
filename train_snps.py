@@ -19,8 +19,7 @@ def train(yaml_file, save_path):
     label_file = path.join(data_path, "gen.chr1_labels.npy")
 
     data = np.load(data_file)
-    samples = data.shape[0]
-    dim = data.shape[1]
+    samples, dim = data.shape
     del data
 
     yaml = open(yaml_file , "r").read()
