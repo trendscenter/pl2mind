@@ -1,0 +1,81 @@
+# This file shows how to train a guassian-binary RBM on fMRI data with L1 regularization.
+!obj:pylearn2.train.Train {
+    # For this model, we use a special data interface specifically created for this task.
+    # In this case, we are training a read-only version of the data, to limit the amount
+    # of memory used by loading all of the data onto memory.
+    dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_On_Memory {
+        which_set: "train",
+        center: &center True,
+        variance_normalize: &vn True,
+        apply_mask: &app_mask True,
+        dataset_name: &ds_name "smri"
+    },
+    model: !obj:pylearn2.models.dbm.RBM {
+        batch_size: %(batch_size)i,
+        niter: 1,
+        # The visible layer of this RBM are linear variables with gaussian noise.
+        visible_layer: !obj:pylearn2.models.dbm.GaussianVisLayer {
+            nvis: %(nvis)i,
+        },
+        hidden_layer:
+            # This RBM has one hidden layer, consisting of a binary vector.  We also
+            # the binary units to be more interpretable in terms of intrinsic networks.
+            !obj:pylearn2.models.dbm.BinaryVectorMaxPool {
+                # Every layer in the DBM must have a layer_name field.
+                layer_name: 'h',
+                pool_size: 1,
+                # Number of hidden units
+                detector_layer_dim: %(detector_layer_dim)i,
+                # We initialize the weights by drawing them from W_ij ~ U(-irange, irange)
+                irange: .05,
+                init_bias: 0.,
+                center: True
+            }
+    },
+    # We train the model using stochastic gradient descent.
+    # One benefit of using pylearn2 is that we can use the exact same piece of
+    # code to train a DBM as to train an MLP. The interface that SGD uses to get
+    # the gradient of the cost function from an MLP can also get the *approximate*
+    # gradient from a DBM.
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+               # We initialize the learning rate and momentum here. Down below
+               # we can control the way they decay with various callbacks.
+               learning_rate: 1e-2,
+               # Compute new model parameters using SGD + Momentum
+               learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
+                   init_momentum: 0.5,
+               },
+               train_iteration_mode: "even_shuffled_sequential",
+               # These arguments say to compute the monitoring channels on 10 batches
+               # of the training set.
+               monitoring_batches: %(monitoring_batches)i,
+               monitor_iteration_mode: "even_sequential",
+               # We monitory on training and testing data.
+               monitoring_dataset : 
+                   {
+                   'train' : *data,
+                   'test': !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_On_Memory {
+                           which_set: "test",
+                            center: *center,
+                            variance_normalize: *vn,
+                            apply_mask: *app_mask,
+                            dataset_name: *ds_name
+                            },
+                },
+               # The SumOfCosts allows us to add together a few terms to make a complicated
+               # cost function.
+               cost : !obj:pylearn2.costs.cost.SumOfCosts {
+                costs: [
+                        # The first term of our cost function is contrastive divergence.
+                        !obj:pylearn2.costs.dbm.BaseCD {},
+                        # The second term of our cost function is L1 weight decay.
+                        !obj:pylearn2.costs.dbm.L1WeightDecay { coeffs: [ .08  ] },
+                       ],
+           },
+           # We tell the RBM to train for x epochs
+           termination_criterion: !obj:pylearn2.termination_criteria.EpochCounter { max_epochs: %(max_epochs)i },
+        },
+    save_path: "%(save_path)s/rbm.pkl",
+    # This says to save it every epoch
+    save_freq : 1
+}
