@@ -77,7 +77,7 @@ def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=
     _, _, _, value0 = parse_SNP_line(lines[0],
                                      snp_format=snp_format,
                                      minor_major=('T', 'T'))
-    values = np.zeros((len(lines), value0.shape[0]))
+    values = np.zeros((len(lines), value0.shape[0]), dtype=np.int8)
     for i, line in enumerate(lines):
         if minor_majors is None:
             minor_major = None

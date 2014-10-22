@@ -246,7 +246,7 @@ def find_rois(nifti, fnifti, thr):
 
             rois = find_region_names(coords)
             grey_value = check_grey(coords)
-            
+
             clust_dict[c] = {'coords': coords,
                              'volume': cs[0],
                              'cm': cm,

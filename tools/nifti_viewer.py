@@ -41,6 +41,8 @@ cmap = matplotlib.colors.LinearSegmentedColormap('my_colormap',cdict,256)
 
 def montage(nifti, anat, roi_dict,
             thr=2, fig=None, out_file=None):
+    if isinstance(anat, str):
+        anat = load_image(anat)
     assert nifti is not None
     assert anat is not None
     assert roi_dict is not None
@@ -121,7 +123,7 @@ def make_argument_parser():
     parser.add_argument("--thr", default=2, help="Threshold for features.")
     return parser
 
-def main(nifti_file, anat_file, roi_file, out_file, thr):
+def main(nifti_file, anat_file, roi_file, out_file, thr=2):
     iscale = 2
     nifti = load_image(nifti_file)
     anat = load_image(anat_file)
