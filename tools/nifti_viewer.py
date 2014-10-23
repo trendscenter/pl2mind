@@ -52,7 +52,6 @@ def montage(nifti, anat, roi_dict,
     iscale=2
     weights = nifti.get_data(); weights /= weights.std()
     features = weights.shape[-1]
-    assert features == len(roi_dict)
 
     indices = [0]        
     y = 8
@@ -66,6 +65,12 @@ def montage(nifti, anat, roi_dict,
     plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, wspace=0.1, hspace=0)
    
     for f in xrange(features):
+        roi = roi_dict.get(f, None)
+        if roi is None:
+            continue
+        coords = roi["top_clust"]["coords"]
+        assert coords is not None
+
         stdout.write("\rSaving montage: %d   " % f)
         stdout.flush()
             
@@ -73,8 +78,6 @@ def montage(nifti, anat, roi_dict,
         imax = np.max(np.absolute(feat)); imin = -imax
         imshow_args = {'vmax': imax, 'vmin': imin}
          
-        coords = roi_dict[f]["top_clust"]["coords"]
-        assert coords is not None
 
         # For some reason we need to do this.
         coords = ([-coords[0], -coords[1], coords[2]])
