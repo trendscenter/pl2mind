@@ -3,9 +3,15 @@
 
     WRITEME
 """
+<<<<<<< HEAD
 __authors__ = "Devon Hjelm"
 __copyright__ = "Copyright 2010-2012, Universite de Montreal"
 __credits__ = ["Devon Hjelm"]
+=======
+__authors__ = "Ian Goodfellow"
+__copyright__ = "Copyright 2010-2012, Universite de Montreal"
+__credits__ = ["Ian Goodfellow"]
+>>>>>>> df1c7653784efe5fd3d91d52cca2793e6a0b2de1
 __license__ = "3-clause BSD"
 __maintainer__ = "LISA Lab"
 __email__ = "pylearn-dev@googlegroups"
