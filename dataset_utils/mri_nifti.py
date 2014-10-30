@@ -138,7 +138,8 @@ def save_mask(data, out_dir):
     np.save(mask_path, mask)
 
 def main(source_directory, out_dir, h_pattern=None, sz_pattern=None):
-    data, labels = read_niftis(source_directory, h_pattern=h_pattern, sz_pattern=sz_pattern)
+    data, labels = read_niftis(source_directory, h_pattern=h_pattern,
+                               sz_pattern=sz_pattern)
     save_mask(data, out_dir)
     split_save_data(data, labels, .80, out_dir)
 
@@ -157,7 +158,8 @@ def make_argument_parser():
     return parser
 
 if __name__ == "__main__":
-    assert path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")), "Did you export PYLEARN2_NI_PATH?"
+    assert path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")),\
+        "Did you export PYLEARN2_NI_PATH?"
     parser = make_argument_parser()
     args = parser.parse_args()
 
