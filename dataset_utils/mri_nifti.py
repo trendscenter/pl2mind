@@ -59,12 +59,17 @@ def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
     h_files, sz_files = pull_niftis(source_directory, h_pattern, sz_pattern)
 
     labels = [0] * len(h_files) + [1] * len(sz_files)
+    assert len([i for i in labels if i == 0]) == len(h_files)
+    assert len([i for i in labels if i == 1]) == len(sz_files)
+
     data0 = load_image(h_files[0]).get_data()
     if len(data0.shape) == 3:
         x, y, z = data0.shape
         t = 1
-    else:
+    elif len(data0.shape) == 4:
         x, y, z, t = data0.shape
+    else:
+        raise ValueError("Cannot parse data with dimensions %r" % data0.shape)
 
     dt = (len(h_files) + len(sz_files)) * t
     data = np.zeros((dt, x, y, z))
@@ -72,8 +77,10 @@ def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
     for i, f in enumerate(h_files + sz_files):
         stdout.write("\rLoading subject from file: %s%s" % (f, '' * 30))
         stdout.flush()
+
         nifti = load_image(f)
         subject_data = nifti.get_data()
+
         if len(subject_data.shape) == 3:
             data[i] = subject_data
         elif len(subject_data.shape) == 4:
@@ -82,6 +89,7 @@ def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
             raise ValueError("Cannot parse subject data with dimensions %r" % subject_data.shape)
     
     stdout.write("\rLoading subject from file: %s\n" % ('DONE' + ''*30))
+    assert data.shape[0] == len(labels)
     return data, labels
 
 def split_save_data(data, labels, train_percentage, out_dir):
@@ -109,10 +117,14 @@ def split_save_data(data, labels, train_percentage, out_dir):
         "Train and test do not add up, %d + %d != %d" %\
         (len(train_idx), len(test_idx), len(subject_idx))
 
+    np.save(path.join(out_dir, "train_idx.npy"), train_idx)
+    np.save(path.join(out_dir, "test_idx.npy"), test_idx)
+    np.save(path.join(out_dir, "full_unshuffled.npy"), data)
+    np.save(path.join(out_dir, "full_labels_unshuffled.npy"), labels)
     np.save(path.join(out_dir, "train.npy"), data[train_idx])
-    np.save(path.join(out_dir, "train_labels.npy"), [l for i,l in enumerate(labels) if i in train_idx])
+    np.save(path.join(out_dir, "train_labels.npy"), [labels[i] for i in train_idx])
     np.save(path.join(out_dir, "test.npy"), data[test_idx])
-    np.save(path.join(out_dir, "test_labels.npy"), [l for i,l in enumerate(labels) if i in test_idx])
+    np.save(path.join(out_dir, "test_labels.npy"), [labels[i] for i in test_idx])
 
 def save_mask(data, out_dir):
     """

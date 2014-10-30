@@ -257,7 +257,7 @@ class MRI_On_Memory(dense_design_matrix.DenseDesignMatrix):
     """
     
     def __init__(self, which_set, center=False, variance_normalize=False,
-                 shuffle=False, apply_mask=False, preprocessor=None, dataset_name='smri'):
+                 shuffle=False, apply_mask=False, preprocessor=None, dataset_name="smri"):
         self.args = locals()
 
         if which_set not in ['train', 'test']:
