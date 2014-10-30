@@ -22,6 +22,7 @@ from pylearn2.utils.rng import make_np_rng
 from theano import config
 from theano.compat.python2x import OrderedDict
 
+from pylearn2.neuroimaging_utils.research import randomize_snps
 
 class MultimodalMLP(mlp.MLP):
     def __init__(self, dataset, layers):
@@ -59,9 +60,10 @@ class MultiChromosome(Dataset):
     _default_seed = (18, 4, 646)
     def __init__(self, which_set,
                  chromosomes="ALL",
+                 dataset_name="snp",
                  read_only=False,
                  start=None, stop=None, shuffle=False,
-                 rng=_default_seed, preprocessor=None):
+                 add_noise=False, rng=_default_seed):
 
         assert int(chromosomes) or chromosomes == "ALL",\
             "Can only set chromosomes to be an integer or ALL"
@@ -71,7 +73,7 @@ class MultiChromosome(Dataset):
                 'Unrecognized which_set value "%s".' % (which_set,) +
                 '". Valid values are ["train", "test", "valid"].')
 
-        p = serial.preprocess("${PYLEARN2_NI_PATH}/snp")
+        p = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
         if which_set in ["train", "valid"]:
             data_files = glob(path.join(p, "gen.chr*.npy"))
             label_file = path.join(p, "gen_labels.npy")
@@ -114,7 +116,7 @@ class MultiChromosome(Dataset):
                 assert "%d" % (c+1) in data_files[c]
                 assert X.shape[0] == self.y.shape[0],\
                     "Data and labels have different number of samples (%d vs %d)" %\
-                    (X.shape[0], y.shape[0])
+                    (X.shape[0], self.y.shape[0])
 
                 self.Xs = self.Xs + (X / 2.0,)
                 sizes.append(X.shape[1])
@@ -139,9 +141,11 @@ class MultiChromosome(Dataset):
         self._iter_targets = False
         self._iter_data_specs = self.data_specs
 
-        if preprocessor:
-            preprocessor.apply(self, can_fit=fit_preprocessor)
-        self.preprocessor = preprocessor
+        if add_noise:
+            self.convert = list(randomize_snps.RandomizeSNPs(input_space=x_space)
+                            for x_space in self.X_space.components) + [None]
+        else:
+            self.convert = None
 
     @functools.wraps(Dataset.iterator)
     def iterator(self, mode=None, batch_size=None, num_batches=None,
@@ -165,7 +169,8 @@ class MultiChromosome(Dataset):
             self,
             subset_iterator=subset_iterator,
             data_specs=data_specs,
-            return_tuple=return_tuple)
+            return_tuple=return_tuple,
+            convert=self.convert)
     
     def get_data_specs(self):
         """
