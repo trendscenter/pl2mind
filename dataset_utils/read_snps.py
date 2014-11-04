@@ -15,7 +15,7 @@ from os import path
 import random
 from pylearn2.utils import serial
 
-def parse_SNP_line(line, snp_format="ORDERED", minor_major=None):
+def parse_SNP_line(line, snp_format="ORDERED", minor_majors=None):
     """
     Function to parse a single line in SNP file according to a format.
     """
@@ -34,25 +34,26 @@ def parse_SNP_line(line, snp_format="ORDERED", minor_major=None):
             assert (sum(elems[j:j+3]) == 1), "Cannot read format of %r" % elems[j:j+3]
             values[(j - 5) / 3] = elems[j:j+3].index(1)
     elif snp_format == "PAIRS":
-        assert minor_major is not None
-        minor_allele, major_allele = minor_major
         assert (len(elems) - 4) % 2 == 0,\
             "Incorrect number of elements in SNP line, %d, should be 4 + a, where a %% 2 == 0" % len(elems)
         name = elems[1]
+        assert minor_majors is not None
+        minor_major = minor_majors[name]
+        minor_allele, major_allele = minor_major
+
         location = int(elems[3])
         values = np.zeros((len(elems) - 4) / 2)
-
         for j in range(4, len(elems), 2):
             values[(j - 4) / 2] = sum(map(lambda x : 1 if x is major_allele else 0, elems[j:j+2]))
     else:
-        raise ValueError("% formating not supported, use only ORDERED or PAIRS." % snp_format)
+        raise ValueError("%s formating not supported, use only ORDERED or PAIRS." % snp_format)
 
     return name, location, (major_allele, minor_allele), values
 
 def read_minor_major(line):
     elems = line.translate(None, "\n").split("\t")
     assert len(elems) == 6
-    return elems[4], elems[5]
+    return (elems[1], (elems[4], elems[5]))
 
 def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=None):
     assert isinstance(snp_file, (file, str))
@@ -65,7 +66,7 @@ def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=
         assert bim_file
         with open(bim_file, "r") as bim_f:
             bim_lines = bim_f.readlines()
-            minor_majors = map(lambda line : read_minor_major(line), bim_lines)
+            minor_majors = dict(map(lambda line : read_minor_major(line), bim_lines))
     else:
         minor_majors = None
 
@@ -74,16 +75,22 @@ def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=
     alleles = []
     lines = f.readlines(); f.close()
     lines = [l for l in lines if ("rsdummy" not in l)]
+    if snp_format == "PAIRS":
+        line_parsed = lines[0].split(" ")
+        name0 = line_parsed[1]
+        mm0 = {name0: (line_parsed[4], line_parsed[4])}
+    else:
+        mm0 = None
     _, _, _, value0 = parse_SNP_line(lines[0],
                                      snp_format=snp_format,
-                                     minor_major=('T', 'T'))
+                                     minor_majors=mm0)
     values = np.zeros((len(lines), value0.shape[0]), dtype=np.int8)
+#    if bim_lines is not None:
+#        assert len(lines) == len(bim_lines), "Chromosome lines and bim lines are different: %d vs %d"\
+#            % (len(lines), len(bim_lines))
     for i, line in enumerate(lines):
-        if minor_majors is None:
-            minor_major = None
-        else:
-            minor_major = minor_majors[i]
-        name, location, allele_pair, value = parse_SNP_line(line, snp_format=snp_format, minor_major=minor_major)
+        name, location, allele_pair, value = parse_SNP_line(line, snp_format=snp_format,
+                                                            minor_majors=minor_majors)
         names.append(name)
         locations.append(locations)
         alleles.append(allele_pair)
@@ -185,6 +192,7 @@ def save_tped_data(source_directory,
     sample_num = None
     for c in range(1, num_chromosomes + 1):
         print "Processing subject chromosome %d" % c
+
         bim_file = path.join(source_directory, chr_dir % c, "chr%d.bim" % c)
         chr_file = path.join(source_directory, chr_dir % c, file_string % c)
         samples = read_SNP_file(chr_file,
@@ -208,6 +216,8 @@ def save_tped_data(source_directory,
     if directory:
         label_path = path.join(p, tag + "_labels.npy")
         np.save(label_path, labels)
+    else:
+        return samples, labels
 
 def check_snps(directory, chromosome):
     gen_file = "chr%d_risk_n10000.cases.gen" % chromosome

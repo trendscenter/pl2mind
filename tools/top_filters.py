@@ -30,22 +30,15 @@ from pylearn2.gui.patch_viewer import PatchViewer
 from pylearn2.gui.patch_viewer import make_viewer
 from pylearn2.config import yaml_parse
 
-if len(sys.argv) == 2:
-    _, model_path = sys.argv
-    out_prefix = None
-else:
-    _, model_path, out_prefix =sys.argv
 
-model = serial.load(model_path)
+def main(model_path):
+    model = serial.load(model_path)
+    rbm1, rbm2 = model.rbms[0:2]
 
-rbm1, rbm2 = model.rbms[0:2]
+    W1 = rbm1.hidden_layers[0].get_weights()
+    W2 = rbm2.hidden_layers[0].get_weights()
 
-W1 = rbm1.hidden_layers[0].get_weights()
-W2 = rbm2.hidden_layers[0].get_weights()
-print W1.shape
-print W2.shape
-
-prod = np.dot(W1,W2)
+W = np.dot(W1,W2)
 pv = make_viewer(prod.T)
 if out_prefix is None:
     pv.show()
@@ -146,3 +139,12 @@ if out_prefix is None:
     pv.show()
 else:
     pv.save(out_prefix+".png")
+
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 2:
+        _, model_path = sys.argv
+        out_prefix = None
+    else:
+        _, model_path, out_prefix =sys.argv

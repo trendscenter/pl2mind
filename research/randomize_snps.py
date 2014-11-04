@@ -31,7 +31,7 @@ class RandomizeSNPs(Block):
     input_space : WRITEME
     """
     def __init__(self, theano_rng = None, seed=None,
-                 input_space=None, corruption_prob=0.05):
+                 input_space=None, corruption_prob=0.1):
         super(RandomizeSNPs, self).__init__()
         assert theano_rng is None or seed is None
         theano_rng = make_theano_rng(theano_rng if theano_rng is not None else seed,

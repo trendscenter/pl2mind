@@ -3,7 +3,7 @@ import functools
 from glob import glob
 import numpy as np
 from os import path
-import tables
+#import tables
 
 from pylearn2.datasets import control
 from pylearn2.datasets import Dataset
@@ -29,6 +29,12 @@ class MultimodalMLP(mlp.MLP):
         super(MultimodalMLP, self).__init__(layers,
                                             input_space=dataset.X_space,
                                             input_source=dataset.X_source)
+
+    @functools.wraps(mlp.Layer.get_monitoring_channels)
+    def get_monitoring_channels(self, data):
+        rval = super(MultimodalMLP, self).get_monitoring_channels(data)
+        rval = OrderedDict((r,rval[r]) for r in rval if "misclass" in r)
+        return rval
 
 class MultiChromosomeLayer(mlp.CompositeLayer):
     def __init__(self, num_layers, layer_to_copy):
@@ -142,7 +148,10 @@ class MultiChromosome(Dataset):
         self._iter_data_specs = self.data_specs
 
         if add_noise:
-            self.convert = list(randomize_snps.RandomizeSNPs(input_space=x_space)
+            if add_noise is True:
+                add_noise = 0.05
+            self.convert = list(randomize_snps.RandomizeSNPs(input_space=x_space,
+                                                             corruption_prob=add_noise)
                             for x_space in self.X_space.components) + [None]
         else:
             self.convert = None
