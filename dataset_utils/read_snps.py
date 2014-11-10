@@ -10,6 +10,7 @@ __email__ = "dhjelm@mrn.org"
 __maintainer__ = "Devon Hjelm"
 
 import argparse
+import gzip
 import numpy as np
 from os import path
 import random
@@ -55,18 +56,31 @@ def read_minor_major(line):
     assert len(elems) == 6
     return (elems[1], (elems[4], elems[5]))
 
-def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=None):
+def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=None, hapz_file=None):
     assert isinstance(snp_file, (file, str))
     if isinstance(snp_file, file):
         f = snp_file
     else:
-        f = open(snp_file, "r")
+        try:
+            f = open(snp_file, "r")
+        except IOError:
+            f = gzip.open(snp_file + ".gz", "r")
 
     if snp_format == "PAIRS":
         assert bim_file
+        assert hapz_file
         with open(bim_file, "r") as bim_f:
             bim_lines = bim_f.readlines()
             minor_majors = dict(map(lambda line : read_minor_major(line), bim_lines))
+        with open(hapz_file, "r") as hapz_f:
+            for line in hapz_f.readlines():
+                parsed = line.split(" ")
+                parsed = [p.translate(None, "\n") for p in parsed]
+                name = parsed[1]
+                first, second = int(parsed[3]), int(parsed[4])
+                assert (first, second) in [(1, 2), (2, 1)]
+                if (first, second) == (2, 1):
+                    minor_majors[name] = (minor_majors[name][1], minor_majors[name][0])
     else:
         minor_majors = None
 
@@ -194,10 +208,12 @@ def save_tped_data(source_directory,
         print "Processing subject chromosome %d" % c
 
         bim_file = path.join(source_directory, chr_dir % c, "chr%d.bim" % c)
+        hapz_file = path.join(source_directory, chr_dir % c, "chr%s.hapz" % c)
         chr_file = path.join(source_directory, chr_dir % c, file_string % c)
         samples = read_SNP_file(chr_file,
                                 snp_format="PAIRS",
-                                bim_file=bim_file).T
+                                bim_file=bim_file,
+                                hapz_file=hapz_file).T
         
         if sample_num is None:
             sample_num = samples.shape[0]

@@ -58,7 +58,6 @@ class MultiChromosomeLayer(mlp.CompositeLayer):
         rval = OrderedDict()
         return rval
         
-
 class MultiChromosome(Dataset):
     """
     Class to read multiple chromosome data.
@@ -67,7 +66,7 @@ class MultiChromosome(Dataset):
     def __init__(self, which_set,
                  chromosomes="ALL",
                  dataset_name="snp",
-                 read_only=False,
+                 read_only=False, balance_classes=False,
                  start=None, stop=None, shuffle=False,
                  add_noise=False, rng=_default_seed):
 
@@ -97,6 +96,24 @@ class MultiChromosome(Dataset):
         self.Xs = ()
         space = ()
         source = ()
+
+        balanced_idx = None
+        if balance_classes:
+            num_classes = np.amax(self.y) + 1
+            class_counts = [len(np.where(self.y == i)[0].tolist())
+                            for i in range(num_classes)]
+            min_count = min(class_counts)
+            balanced_idx = []
+            for i in range(num_classes):
+                idx = np.where(self.y == i)[0].tolist()[:min_count]
+                balanced_idx += idx
+            balanced_idx.sort()
+            assert len(balanced_idx) / min_count == num_classes
+            assert len(balanced_idx) % min_count == 0
+
+            self.y = self.y[balanced_idx]
+            for i in range(num_classes):
+                assert len(np.where(self.y == i)[0].tolist()) == min_count
         
         if read_only:
             print "Format is read-only for %s" % which_set
@@ -120,12 +137,18 @@ class MultiChromosome(Dataset):
                 X = np.load(data_files[c])[start:stop, :]
 
                 assert "%d" % (c+1) in data_files[c]
+
+                if balanced_idx is not None:
+                    X = X[balanced_idx]
+
                 assert X.shape[0] == self.y.shape[0],\
                     "Data and labels have different number of samples (%d vs %d)" %\
                     (X.shape[0], self.y.shape[0])
 
                 self.Xs = self.Xs + (X / 2.0,)
                 sizes.append(X.shape[1])
+
+        print "%s samples are %d" % (which_set, self.y.shape[0])
 
         space = tuple(VectorSpace(dim=size) for size in sizes)
         source = tuple("chromosomes_%d" % (c + 1) for c in range(chromosomes))
