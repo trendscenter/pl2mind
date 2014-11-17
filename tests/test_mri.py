@@ -1,8 +1,21 @@
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI_On_Memory
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Big
-from pylearn2.utils import serial
+"""
+Module to test MRI datasets.
+"""
+
+import logging
 import numpy as np
 from os import path
+
+from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Standard
+from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Transposed
+from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Big
+from pylearn2.utils import serial
+
+import sys
+
+logging.basicConfig(format="%[levelname]s:%(message)s", level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+stream_handler = logging.StreamHandler(sys.stdout)
 
 def check_datasets(exp, act):
     assert np.all(exp == act),\
@@ -21,13 +34,13 @@ class TestMRI:
         Checks if data and labels line up with the full dataset giving
         the indices.
         """
-        mri_train = MRI_On_Memory("train", apply_mask=False,
-                                  center=False, variance_normalize=False,
-                                  dataset_name="smri")
-        train_idx = np.load(path.join(self.p, "train_idx.npy"))
-        mri_test = MRI_On_Memory("test", apply_mask=False,
+        mri_train = MRI_Standard("train", apply_mask=False,
                                  center=False, variance_normalize=False,
                                  dataset_name="smri")
+        train_idx = np.load(path.join(self.p, "train_idx.npy"))
+        mri_test = MRI_Standard("test", apply_mask=False,
+                                center=False, variance_normalize=False,
+                                dataset_name="smri")
         test_idx = np.load(path.join(self.p, "test_idx.npy"))
         full = np.load(path.join(self.p, "full_unshuffled.npy"))
         labels = np.load(path.join(self.p, "full_labels_unshuffled.npy"))
@@ -38,10 +51,13 @@ class TestMRI:
                        mri_test.X)
         check_datasets(labels[test_idx], mri_test.y.flatten())
 
-    def test_mask(self):
+    def test_mask(self, transposed=False):
         mask = np.load(self.mask_path)
         rows, columns, depth = mask.shape
-        mri = MRI_On_Memory("test", apply_mask=True, dataset_name="smri")
+        if not transposed:
+            mri = MRI_Standard("test", apply_mask=True, dataset_name="smri")
+        else:
+            mri = MRI_Transposed("test", apply_mask=True, dataset_name="smri")
 
         topo_view = mri.get_topological_view()
         X = mri.X
@@ -65,14 +81,33 @@ class TestMRI:
 
         design_mat = mri.get_design_matrix(topo=topo_view)
         assert design_mat.shape == X.shape
-        assert len(np.where(mask.flatten() == 1)[0].tolist()) == X.shape[1]
+        if not transposed:
+            assert len(np.where(mask.flatten() == 1)[0].tolist()) == X.shape[1]
+        else:
+            assert len(np.where(mask.flatten() == 1)[0].tolist()) == X.shape[0]
         for s in range(samples):
             for i in range(design_mat.shape[1]):
                 assert X[s][i] == design_mat[s][i]
 
+    def test_transpose(self):
+        mri = MRI_Transposed(apply_mask=False, dataset_name="smri")
+        topo_view = mri.get_topological_view()
+        X = mri.X.T
+        assert X.shape[1] == topo_view.shape[1] * topo_view.shape[2] * topo_view.shape[3],\
+            "Shaped don't match, X has shape %s while topo_view has shape %s." % (X.shape,
+                                                                                topo_view.shape)
+        assert np.allclose(topo_view, X.reshape(X.shape[0],
+                                                topo_view.shape[3],
+                                                topo_view.shape[1],
+                                                topo_view.shape[2]).transpose((0,2,3,1))),\
+                                                "Transpose reshape failed"
+
+    def test_transpose_with_mask(self):
+        self.test_mask(transposed=True)
+
     def _test_pytable(self, center=False, variance_normalize=False):
         mask = np.load(self.mask_path)
-        mri_mem = MRI_On_Memory('test', apply_mask=True,
+        mri_mem = MRI_Standard('test', apply_mask=True,
                                 center=center, variance_normalize=variance_normalize,
                                 dataset_name='smri')
         mri_big = MRI_Big('test', apply_mask=True,

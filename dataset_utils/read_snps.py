@@ -15,8 +15,9 @@ import numpy as np
 from os import path
 import random
 from pylearn2.utils import serial
+import warnings
 
-def parse_SNP_line(line, snp_format="ORDERED", minor_majors=None):
+def parse_SNP_line(line, snp_format="ORDERED", minor_majors=None, read_names_only=False):
     """
     Function to parse a single line in SNP file according to a format.
     """
@@ -25,6 +26,8 @@ def parse_SNP_line(line, snp_format="ORDERED", minor_majors=None):
         assert (len(elems) - 5) % 3 == 0,\
             "Incorrect number of elements in SNP line, %d, should be 5 + a, where a %% 3 == 0" % len(elems)
         name, location, minor_allele, major_allele = elems[1:5]
+        if read_names_only:
+            return name, None, None, 0
         location = int(location)
         values = np.zeros((len(elems) - 5) / 3)
         
@@ -38,6 +41,8 @@ def parse_SNP_line(line, snp_format="ORDERED", minor_majors=None):
         assert (len(elems) - 4) % 2 == 0,\
             "Incorrect number of elements in SNP line, %d, should be 4 + a, where a %% 2 == 0" % len(elems)
         name = elems[1]
+        if name not in minor_majors:
+            return name, None, None, 0
         assert minor_majors is not None
         minor_major = minor_majors[name]
         minor_allele, major_allele = minor_major
@@ -56,7 +61,8 @@ def read_minor_major(line):
     assert len(elems) == 6
     return (elems[1], (elems[4], elems[5]))
 
-def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=None, hapz_file=None):
+def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES",
+                  bim_file=None, hapz_file=None, reference_file=None):
     assert isinstance(snp_file, (file, str))
     if isinstance(snp_file, file):
         f = snp_file
@@ -65,6 +71,21 @@ def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=
             f = open(snp_file, "r")
         except IOError:
             f = gzip.open(snp_file + ".gz", "r")
+
+    ref_names = None
+    ref_probs = None
+    if reference_file is not None:
+        ref_names = read_SNP_file(reference_file, snp_format=snp_format,
+                                  read_value="NAMES", bim_file=bim_file,
+                                  hapz_file=hapz_file)
+        ref_values = read_SNP_file(reference_file, snp_format=snp_format,
+                                   read_value="VALUES", bim_file=bim_file,
+                                   hapz_file=hapz_file)
+        ref_probs = dict((name, [len(np.where(vs == i)[0].tolist()) * 1./ len(vs) for i in range(3)])
+                         for name, vs in zip(ref_names, ref_values))
+        for name in ref_probs:
+            assert name in ref_names
+            assert sum(ref_probs[name]) - 1.0 < 0.0001, ref_probs[name]
 
     if snp_format == "PAIRS":
         assert bim_file
@@ -98,22 +119,43 @@ def read_SNP_file(snp_file, snp_format="ORDERED", read_value="VALUES", bim_file=
     _, _, _, value0 = parse_SNP_line(lines[0],
                                      snp_format=snp_format,
                                      minor_majors=mm0)
-    values = np.zeros((len(lines), value0.shape[0]), dtype=np.int8)
-#    if bim_lines is not None:
-#        assert len(lines) == len(bim_lines), "Chromosome lines and bim lines are different: %d vs %d"\
-#            % (len(lines), len(bim_lines))
+    values = {}
     for i, line in enumerate(lines):
         name, location, allele_pair, value = parse_SNP_line(line, snp_format=snp_format,
-                                                            minor_majors=minor_majors)
+                                                            minor_majors=minor_majors,
+                                                            read_names_only=(read_value=="NAMES"))
+
         names.append(name)
-        locations.append(locations)
-        alleles.append(allele_pair)
-        values[i] = value
-        
-    if read_value == "VALUES":
-        return values
-    elif read_value == "NAMES":
+        if read_value != "NAMES":
+            locations.append(locations)
+            alleles.append(allele_pair)
+            values[name] = value
+
+    if ref_names is not None:
+        names = ref_names
+
+    if read_value == "NAMES":
         return names
+
+    missed_names = 0
+    for name in names:
+        if name not in values:
+            missed_names += 1
+    if missed_names > 0:
+        warnings.warn("Some SNPs missing from new dataset (%d, %.2f%%). Filling with values from MCIC priors."\
+                          % (missed_names, 100 * float(missed_names) / len(names)))
+    if missed_names == 0:
+        values = [values[name] for name in names]
+    else:
+        values = [values.get(name, np.random.choice(3,
+                                                    p=ref_probs[name],
+                                                    size=value0.shape[0]).astype(np.int8)) for name in names]
+    total_values = np.zeros((len(values), value0.shape[0]), dtype=np.int8)
+    for i, value in enumerate(values):
+        total_values[i] = value
+    
+    if read_value == "VALUES":
+        return total_values
     else:
         raise NotImplementedError("Can only return VALUES, NAMES, not %s yet" % read_value)
 
@@ -123,7 +165,7 @@ def read_labels(line):
     assert len(elems) % 2 == 0, "Label line must be in for format major_allele minor_allele, e.g. 1 1 or 0 0 repeated for each subject."
     labels = []
     for i in range(0, len(elems), 2):
-        assert elems[i] == elems[i+1], "Can only read 0 0 (healthy) or 1 1 (schizophrenia)."
+        assert elems[i] == elems[i+1], "Can only read 0 0 (healthies) or 1 1 (schizophrenia)."
         labels.append(elems[i])
     return labels
 
@@ -195,6 +237,7 @@ def save_gen_data(source_directory, num_chromosomes, num_samples, directory=None
 
 def save_tped_data(source_directory,
                    num_chromosomes,
+                   reference_directory=None,
                    directory=None,
                    label_file=None):
 
@@ -202,18 +245,26 @@ def save_tped_data(source_directory,
     file_string = "chr%d.tped"
     chr_dir = "chr%d"
     tag = "real"
+    if reference_directory is None:
+        reference_directory = source_directory 
 
     sample_num = None
     for c in range(1, num_chromosomes + 1):
         print "Processing subject chromosome %d" % c
 
-        bim_file = path.join(source_directory, chr_dir % c, "chr%d.bim" % c)
-        hapz_file = path.join(source_directory, chr_dir % c, "chr%s.hapz" % c)
+        bim_file = path.join(reference_directory, chr_dir % c, "chr%d.bim" % c)
+        hapz_file = path.join(reference_directory, chr_dir % c, "chr%d.hapz" % c)
         chr_file = path.join(source_directory, chr_dir % c, file_string % c)
+        if reference_directory != source_directory:
+            reference_file = path.join(reference_directory, chr_dir % c, "chr%d.tped" % c)
+        else:
+            reference_file = None
+
         samples = read_SNP_file(chr_file,
                                 snp_format="PAIRS",
                                 bim_file=bim_file,
-                                hapz_file=hapz_file).T
+                                hapz_file=hapz_file,
+                                reference_file=reference_file).T
         
         if sample_num is None:
             sample_num = samples.shape[0]
@@ -265,10 +316,13 @@ def make_argument_parser():
     parser.add_argument("--chromosomes", default=22)
     parser.add_argument("--samples", default=1000)
     parser.add_argument("--check", default=0)
+    parser.add_argument("--reference_directory", default=None,
+                        help="Directory to pull hapz and bim files from. Use when aligning to other data.")
     return parser
 
 if __name__ == "__main__":
-    assert path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")), "Did you export PYLEARN2_NI_PATH?"
+    assert path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")),\
+        "Did you export PYLEARN2_NI_PATH?"
 
     parser = make_argument_parser()
     args = parser.parse_args()
@@ -276,7 +330,6 @@ if __name__ == "__main__":
     if args.check:
         check_snps(args.source_directory, int(args.check))
     else:
-
         if args.format == "ORDERED":
             save_gen_data(args.source_directory,
                           num_chromosomes=int(args.chromosomes),
@@ -286,7 +339,8 @@ if __name__ == "__main__":
             save_tped_data(args.source_directory,
                            num_chromosomes=int(args.chromosomes),
                            directory=args.out,
-                           label_file=args.label_file
+                           label_file=args.label_file,
+                           reference_directory=args.reference_directory
                            )
         else:
             raise ValueError("%s format not supported, must be ORDERED or PAIRS")

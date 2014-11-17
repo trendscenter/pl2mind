@@ -3,6 +3,7 @@ This module is for handling MRI datasets (sMRI and fMRI).
 TODO: handle functional aspects for fMRI here.
 """
 
+import logging
 from nipy import load_image
 from nipy.core.api import Image
 import numpy as np
@@ -14,9 +15,375 @@ from pylearn2.utils import contains_nan
 from pylearn2.utils import safe_zip
 from pylearn2.utils import serial
 from pylearn2.utils.rng import make_np_rng
-#Can't get this working on Mars yet :(
-#import tables 
+
+import sys
 from theano import config
+import warnings
+
+
+logger = logging.getLogger(__name__)
+
+
+class MRI(dense_design_matrix.DenseDesignMatrix):
+    """
+    Base class for MRI datasets.
+    This includes fMRI and sMRI or any other datasets with 3D voxels.
+    """
+
+    def __init__(self, X, y):
+        if self.center:
+            X -= X.mean()
+
+        if self.variance_normalize:
+            X -= X.mean(axis=0)
+            X /= X.std(axis=0)
+
+        if self.shuffle:
+            self.shuffle_rng = make_np_rng(None, [1 ,2 ,3], which_method="shuffle")
+            for i in xrange(m):
+                j = self.shuffle_rng.randint(m)
+                tmp = X[i].copy()
+                X[i] = X[j]
+                X[j] = tmp
+                tmp = y[i:i+1].copy()
+                y[i] = y[j]
+                y[j] = tmp
+
+        max_labels = np.amax(y) + 1
+        logger.info("%d labels found." % max_labels)
+
+        super(MRI, self).__init__(X=X,
+                                  y=y,
+                                  view_converter=self.view_converter,
+                                  y_labels=max_labels)
+
+        assert not np.any(np.isnan(self.X))
+
+    def resolve_dataset(self, which_set, dataset_name):
+        """
+        Resolve the dataset from the file directories.
+
+        Parameters
+        ----------
+        which_set: str
+            train, test, or full.
+        
+        """
+        p = "${PYLEARN2_NI_PATH}/%s/" % dataset_name
+
+        if not(path.isdir(serial.preprocess(p))):
+            raise IOError("MRI dataset directory %s not found."
+                           % serial.preprocess(p))
+
+        if which_set == 'train':
+            data_path = p + 'train.npy'
+            label_path = p + 'train_labels.npy'
+        elif which_set == 'test':
+            data_path = p + 'test.npy'
+            label_path = p + 'test_labels.npy'
+        else:
+            if which_set != "full":
+                raise ValueError("dataset \'%s\' not supported." % which_set)
+            data_path = p + "full_unshuffled.npy"
+            label_path = p + "full_labels_unshuffled.npy"
+        
+        data_path = serial.preprocess(data_path)
+        label_path = serial.preprocess(label_path)
+
+        if not(path.isfile(data_path)):
+            raise ValueError("Dataset %s not found in %s" %(which_set,
+                                                            serial.preprocess(p)))
+        return data_path, label_path
+
+    def get_mask(self, dataset_name):
+        """
+        Get mask for dataset.
+        
+        Parameters
+        ----------
+        dataset_name: str
+            Name of dataset.
+        
+        Returns
+        -------
+        mask: array-like
+            4D array of 1 and 0 values.
+        """
+        p = "${PYLEARN2_NI_PATH}/%s/" % dataset_name
+        mask_path = serial.preprocess(p + "mask.npy")
+        mask = np.load(mask_path)
+        if not np.all(np.bitwise_or(mask == 0, mask == 1)):
+            raise ValueError("Mask has incorrect values.")
+        return mask
+
+    def set_mri_topological_view(self, topo_view, axes=('b', 0, 1, 'c')):
+        """
+        Set the topological view.
+
+        Parameters
+        ----------
+        topo_view: array-like
+            Topological view of a matrix, 4D. Should be MRI 4D data.
+        axes: tuple, optional
+            Axis to use to set topological view.
+
+        Returns
+        -------
+        design_matrix: array-like
+            The corresponding design matrix for the topological view.
+        """
+        raise NotImplementedError()
+
+    def get_weights_view(self, mat):
+        """
+        Get the weights view from a matrix.
+
+        Parameters
+        ----------
+        mat: array-like
+            Matrix to convert.
+         
+        Returns
+        -------
+        weights_view: array-like
+            Weights view of a matrix (see MRIViewConverter).
+        """
+        if self.view_converter is None:
+            raise NotImplementedError("Tried to call get_weights_view on a dataset "
+                            "that has no view converter.")
+
+        weights_view = self.view_converter.design_mat_to_weights_view(mat)
+        return weights_view
+
+    def get_design_matrix(self, topo=None):
+        """
+        Return topo (a batch of examples in topology preserving format),
+        in design matrix format.
+
+        Parameters
+        ----------
+        topo : ndarray, optional
+            An array containing a topological representation of training
+            examples. If unspecified, the entire dataset (`self.X`) is used
+            instead.
+
+        Returns
+        -------
+        design_matrix: array-like
+            Design matrix, 2D. Either self.X or converted topo_view.
+        """
+        if topo is not None:
+            if self.view_converter is None:
+                raise NotImplementedError("Tried to call get_design_matrix"
+                                          "on a dataset "
+                                          "that has no view converter.")
+
+            design_matrix = self.view_converter.topo_view_to_design_mat(topo)
+        else:
+            design_matrix = self.X
+
+        return design_matrix
+
+    def get_topological_view(self, mat=None):
+        """
+        Convert an array (or the entire dataset) to a topological view.
+
+        Parameters
+        ----------
+        mat : ndarray, 2-dimensional, optional
+            An array containing a design matrix representation of training
+            examples. If unspecified, the entire dataset (`self.X`) is used
+            instead.
+
+        Returns
+        -------
+        topo_view: array-like
+            4D topological view.
+        """
+        if self.view_converter is None:
+            raise NotImplementedError("Tried to call get_topological_view on a dataset "
+                                      "that has no view converter")
+        if mat is None:
+            mat = self.X
+        topo_view = self.view_converter.design_mat_to_topo_view(mat)
+
+        return topo_view
+
+    def get_nifti(self, topo_view):
+        """
+        Process the nifti 
+
+        Parameters
+        ----------
+        topo_view: array-like
+            Topological view to create nifti. 4D.
+
+        Returns
+        -------
+        image: nipy image
+            Nifti image from topological view.
+        """
+        m, r, c, d = topo_view.shape
+        base_nifti_path = serial.preprocess("${PYLEARN2_NI_PATH}/mri_extra/basenifti.nii")
+        base_nifti = load_image(base_nifti_path)
+
+        image = Image.from_image(base_nifti, data=topo_view.transpose((1, 2, 3, 0)))
+        return image
+
+
+class MRI_Standard(MRI):
+    """
+    Class for MRI datasets with standard topological view.
+    """
+    
+    def __init__(self,
+                 which_set,
+                 center=False,
+                 variance_normalize=False,
+                 shuffle=False,
+                 apply_mask=False,
+                 preprocessor=None,
+                 dataset_name="smri",
+                 start=None,
+                 stop=None):
+
+        self.__dict__.update(locals())
+        del self.self
+        logger.info("Setting up standard MRI dataset.")
+
+        data_path, label_path = self.resolve_dataset(which_set,
+                                                     dataset_name)
+
+        logger.info("Loading %s data from %s." % (which_set, dataset_name))
+        topo_view = np.load(data_path)
+
+        y = np.atleast_2d(np.load(label_path)).T
+        logger.info("Dataset shape is %r" % (topo_view.shape,))
+
+        if apply_mask:
+            mask = self.get_mask(dataset_name)
+        else:
+            mask = None
+            
+        X = self.set_mri_topological_view(topo_view, mask=mask)
+
+        super(MRI_Standard, self).__init__(X=X, y=y)
+       
+
+    def set_mri_topological_view(self, topo_view, mask=None, axes=('b', 0, 1, 'c')):
+        """
+        Set the topological view.
+
+        Parameters
+        ----------
+        topo_view: array-like
+            Topological view of a matrix, 4D. Should be MRI 4D data.
+        mask: array-like
+            Mask for data.
+        axes: tuple, optional
+            Axis to use to set topological view.
+
+        Returns
+        -------
+        design_matrix: array-like
+            The corresponding design matrix for the topological view.
+        """
+        assert not contains_nan(topo_view)
+        r, c, d = tuple(topo_view.shape[axes.index(i)] for i in (0, 1, 'c'))
+
+        self.view_converter = MRIViewConverter((r, c, d), mask=mask, axes=axes)
+        design_matrix = self.view_converter.topo_view_to_design_mat(topo_view)
+
+        return design_matrix
+
+
+class MRI_On_Memory(MRI_Standard):
+        def __init__(self,
+                 which_set,
+                 center=False,
+                 variance_normalize=False,
+                 shuffle=False,
+                 apply_mask=False,
+                 preprocessor=None,
+                 dataset_name="smri",
+                 start=None,
+                 stop=None):
+            warnings.warn("MRI_On_Memory should be replaced by MRI_Standard", DeprecationWarning)
+            super(MRI_On_Memory, self).__init__(which_set, center, variance_normalize,
+                                                shuffle, apply_mask, preprocessor, dataset_name,
+                                                start, stop)
+
+
+class MRI_Transposed(MRI):
+    """
+    Class to do MRI in transpose.
+    """
+
+    def __init__(self,
+                 which_set="full",
+                 dataset_name="smri",
+                 even_input=False,
+                 center=False,
+                 variance_normalize=False,
+                 shuffle=False,
+                 apply_mask=False,
+                 start=None,
+                 stop=None):
+
+        self.__dict__.update(locals())
+        del self.self
+        logger.info("Setting up transposed MRI dataset.")
+
+        if which_set != "full":
+            warnings.warn("Only full dataset appropriate for transpose.")
+        
+        data_file, label_file = self.resolve_dataset(which_set, dataset_name)
+
+        logger.info("Loading %s data from %s." % (which_set, dataset_name))
+        topo_view = np.load(data_file)
+        y = np.atleast_2d(np.load(label_file))
+        logger.info("Dataset shape is %r" % (topo_view.shape,))
+
+        if even_input and topo_view.shape[0] % 2 == 1:
+            logger.info("Evening input from %d to %d."
+                        % (topo_view.shape[0], topo_view.shape[0] // 2 * 2))
+            topo_view = topo_view[:topo_view.shape[0] // 2 * 2]
+
+        if apply_mask:
+            mask = self.get_mask(dataset_name)
+        else:
+            mask = None
+
+        X = self.set_mri_topological_view(topo_view, mask=mask)
+
+        super(MRI_Transposed, self).__init__(X=X, y=y)
+
+    def set_mri_topological_view(self, topo_view, mask=None, axes=('b', 0, 1, 'c')):
+        """
+        Set the topological view.
+
+        Parameters
+        ----------
+        topo_view: array-like
+            Topological view of a matrix, 4D. Should be MRI 4D data.
+        mask: array-like
+            Mask for data.
+        axes: tuple, optional
+            Axis to use to set topological view.
+
+        Returns
+        -------
+        design_matrix: array-like
+            The corresponding design matrix for the topological view.
+        """
+        assert not contains_nan(topo_view)
+        r, c, d = tuple(topo_view.shape[axes.index(i)] for i in (0, 1, 'c'))
+
+        self.view_converter = MRIViewConverterTransposed(
+            (r, c, d), mask=mask, axes=axes)
+        design_matrix = self.view_converter.topo_view_to_design_mat(topo_view)
+
+        return design_matrix
 
 
 class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
@@ -42,7 +409,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
             If True, then shuffle data when writing h5 (does nothing if not processing an h5).
         apply_mask: bool:
             If True, then the h5 file is masked with a mask file found in the data directory.
-        preprocessor: Not supported yet, TODO.
+        preprocessor: not supported yet, TODO.
         dataset_name: string
             Dataset sub-directory name from ${PYLEARN_NI_PATH}
         reprocess: bool
@@ -51,7 +418,8 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
             Use a dummy file. This is for tests.
         """
 
-        assert path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")), "Did you set the PYLEARN_NI_PATH variable?"
+        if not path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")):
+            raise ValueError("Did you set the PYLEARN_NI_PATH variable?")
 
         if which_set not in ['train', 'test']:
             if which_set == 'valid':
@@ -84,8 +452,10 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
         # Load the mask file and retrieve shape information.
         self.mask = None
         mask_path = serial.preprocess(p + "mask.npy")
-        assert path.isfile(mask_path),\
-            "No mask found in %s. This file is needed to retrieve shape information. Are you sure this is a MRI dataset?" % mask_path
+        if not path.isfile(mask_path):
+            raise IOError("No mask found in %s."
+                          "This file is needed to retrieve shape information."
+                          "Are you sure this is a MRI dataset?" % mask_path)
         mask = np.load(mask_path)
         rows, columns, depth = mask.shape
         if apply_mask:
@@ -101,7 +471,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
 
         self.h5file = tables.openFile(data_path)
         data = self.h5file.getNode('/', "Data")
-        view_converter = NIViewConverter((rows, columns, depth))
+        view_converter = MRIViewConverter((rows, columns, depth))
 
         super(MRI_Big, self).__init__(X=data.X, y=data.y,
                                       view_converter=view_converter)
@@ -142,7 +512,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
         else:
             size = rows * columns * depth
 
-        self.view_converter = NIViewConverter((rows, columns, depth))
+        self.view_converter = MRIViewConverter((rows, columns, depth))
         X = self.view_converter.topo_view_to_design_mat(topo_view, self.mask)
 
         # TODO(dhjelm): one_hot is going away.
@@ -183,7 +553,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
         base_nifti_path = serial.preprocess("${PYLEARN2_NI_PATH}/mri_extra/basenifti.nii")
         base_nifti = load_image(base_nifti_path)
 
-        data = np.zeros([r, c, d, m])
+        data = np.zeros([r, c, d, m], dtype=W.dtype)
 
         for i in range(m):
             data[:, :, :, i]  = W[i]
@@ -251,171 +621,20 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
         return self.view_converter.design_mat_to_topo_view(mat, mask=self.mask)
 
 
-class MRI_On_Memory(dense_design_matrix.DenseDesignMatrix):
-    """
-    Class for MRI datasets.
-    """
-    
-    def __init__(self, which_set, center=False, variance_normalize=False,
-                 shuffle=False, apply_mask=False, preprocessor=None, dataset_name="smri"):
-        self.args = locals()
-
-        if which_set not in ['train', 'test']:
-            if which_set == 'valid':
-                raise ValueError(
-                    "Currently validation dataset is not supported with"
-                    "sMRI.  This can be added in smri_nifti.py"
-                    )
-            raise ValueError(
-                'Unrecognized which_set value "%s".' % (which_set,) +
-                '". Valid values are ["train","test"].')
-
-        p = "${PYLEARN2_NI_PATH}/%s/" % dataset_name
-        if which_set == 'train':
-            data_path = p + 'train.npy'
-            label_path = p + 'train_labels.npy'
-        else:
-            assert which_set == 'test'
-            data_path = p + 'test.npy'
-            label_path = p + 'test_labels.npy'
-
-        data_path = serial.preprocess(data_path)
-        label_path = serial.preprocess(label_path)
-
-        # can locally cache here.  see datasets/mnist.py
-        
-        print "Loading data"
-        topo_view = np.load(data_path)
-
-        y = np.atleast_2d(np.load(label_path)).T
-        m, r, c, d = topo_view.shape
-
-        max_labels = np.amax(y) + 1
-        
-        self.mask = None
-        if apply_mask:
-            mask_path = serial.preprocess(p + "mask.npy")
-            self.mask = np.load(mask_path)
-            assert self.mask.shape == (r, c, d)
-            
-        if shuffle:
-            self.shuffle_rng = make_np_rng(None, [1 ,2 ,3], which_method="shuffle")
-            for i in xrange(m):
-                j = self.shuffle_rng.randint(m)
-                tmp = topo_view[i, :, :, :].copy()
-                topo_view[i, :, :, :] = topo_view[j, :, :, :]
-                topo_view[j, :, :, :] = tmp
-                tmp = y[i:i+1].copy()
-                y[i] = y[j]
-                y[j] = tmp
-                
-        X = self.set_ni_topological_view(topo_view)
-        
-        if center:
-            X -= X.mean(axis=0)
-
-        if variance_normalize:
-            X /= X.std(axis=0)
-
-        super(MRI_On_Memory, self).__init__(X=X, y=y, view_converter=self.view_converter,
-                                   y_labels=max_labels)
-
-        assert not np.any(np.isnan(self.X))
-
-    def set_ni_topological_view(self, topo_view, axes=('b', 0, 1, 'c')):
-        """
-        ... todo::
-
-            WRITEME
-        """
-        assert not contains_nan(topo_view)
-        r, c, d = tuple(topo_view.shape[axes.index(i)] for i in (0, 1, 'c'))
-        self.view_converter = NIViewConverter((r, c, d), axes=axes)
-        X = self.view_converter.topo_view_to_design_mat(topo_view, self.mask)
-        return X
-
-    def get_nifti(self, W):
-        m, r, c, d = W.shape
-        base_nifti_path = serial.preprocess("${PYLEARN2_NI_PATH}/mri_extra/basenifti.nii")
-        base_nifti = load_image(base_nifti_path)
-
-        data = np.zeros([r, c, d, m])
-
-        for i in range(m):
-            data[:, :, :, i]  = W[i]
-
-        image = Image.from_image(base_nifti, data=data)
-        return image
-
-    def get_weights_view(self, mat):
-        """
-        ... todo::
-
-            WRITEME
-        """
-        if self.view_converter is None:
-            raise Exception("Tried to call get_weights_view on a dataset "
-                            "that has no view converter")
-
-        return self.view_converter.design_mat_to_weights_view(mat, self.mask)
-
-    def get_design_matrix(self, topo=None):
-        """
-        Return topo (a batch of examples in topology preserving format),
-        in design matrix format.
-
-        Parameters
-        ----------
-        topo : ndarray, optional
-            An array containing a topological representation of training
-            examples. If unspecified, the entire dataset (`self.X`) is used
-            instead.
-
-        Returns
-        -------
-        WRITEME
-        """
-        if topo is not None:
-            if self.view_converter is None:
-                raise Exception("Tried to convert from topological_view to "
-                                "design matrix using a dataset that has no "
-                                "view converter")
-            return self.view_converter.topo_view_to_design_mat(topo, mask=self.mask)
-
-        return self.X
-
-    def get_topological_view(self, mat=None):
-        """
-        Convert an array (or the entire dataset) to a topological view.
-
-        Parameters
-        ----------
-        mat : ndarray, 2-dimensional, optional
-            An array containing a design matrix representation of training
-            examples. If unspecified, the entire dataset (`self.X`) is used
-            instead.
-            This parameter is not named X because X is generally used to
-            refer to the design matrix for the current problem. In this
-            case we want to make it clear that `mat` need not be the design
-            matrix defining the dataset.
-        """
-        if self.view_converter is None:
-            raise Exception("Tried to call get_topological_view on a dataset "
-                            "that has no view converter")
-        if mat is None:
-            mat = self.X
-        return self.view_converter.design_mat_to_topo_view(mat, mask=self.mask)
-
-
-class NIViewConverter(dense_design_matrix.DefaultViewConverter):
+class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
     """
     Class for neuroimaging view converters. Takes account 3D.
     """
 
-    def __init__(self, shape, axes=('b', 0, 1, 'c')):
-        super(NIViewConverter, self).__init__(shape, axes)
+    def __init__(self, shape, mask=None, axes=('b', 0, 1, 'c')):
+        self.mask = mask
+        if self.mask is not None:
+            if not mask.shape == shape:
+                raise ValueError("Mask shape (%r) does not fit data shape (%r)"
+                                 % (mask.shape, shape))
+        super(MRIViewConverter, self).__init__(shape, axes)
 
-    def design_mat_to_topo_view(self, design_matrix, mask=None):
+    def design_mat_to_topo_view(self, design_matrix):
         """
         ... todo::
 
@@ -426,13 +645,13 @@ class NIViewConverter(dense_design_matrix.DefaultViewConverter):
                              "was %s." % str(design_matrix.shape))
 
         expected_row_size = np.prod(self.shape)
-        if mask is not None:
-            mask_idx = np.where(mask.transpose([self.axes.index(ax)-1
+        if self.mask is not None:
+            mask_idx = np.where(self.mask.transpose([self.axes.index(ax)-1
                                                 for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
-            assert mask.shape == self.shape
-            r, c, d = mask.shape
+            assert self.mask.shape == self.shape
+            r, c, d = self.mask.shape
             m = design_matrix.shape[0]
-            topo_array_bc01 = np.zeros((m, d, r, c))
+            topo_array_bc01 = np.zeros((m, d, r, c), dtype=design_matrix.dtype)
             for i in range(m):
                 sample = topo_array_bc01[i].flatten()
                 sample[mask_idx] = design_matrix[i]
@@ -440,17 +659,17 @@ class NIViewConverter(dense_design_matrix.DefaultViewConverter):
             axis_order = [('b', 'c', 0, 1).index(axis) for axis in self.axes]
             topo_array = topo_array_bc01.transpose(*axis_order)
         else:
-            topo_array = super(NIViewConverter, self).design_mat_to_topo_view(design_matrix)
+            topo_array = super(MRIViewConverter, self).design_mat_to_topo_view(design_matrix)
 
         return topo_array
 
-    def design_mat_to_weights_view(self, X, mask=None):
+    def design_mat_to_weights_view(self, X):
         """
         .. todo::
 
             WRITEME
         """
-        rval = self.design_mat_to_topo_view(X, mask)
+        rval = self.design_mat_to_topo_view(X)
 
         # weights view is always for display
         rval = np.transpose(rval, tuple(self.axes.index(axis)
@@ -458,7 +677,7 @@ class NIViewConverter(dense_design_matrix.DefaultViewConverter):
 
         return rval
 
-    def topo_view_to_design_mat(self, topo_array, mask=None):
+    def topo_view_to_design_mat(self, topo_array):
         """
         ... todo::
 
@@ -476,11 +695,11 @@ class NIViewConverter(dense_design_matrix.DefaultViewConverter):
                     "  self.axes:        %s\n"
                     "  topo_array.shape: %s (should be in self.axes' order)")
 
-        if mask is not None:
+        if self.mask is not None:
             m = topo_array.shape[0]
-            mask_idx = np.where(mask.transpose([self.axes.index(ax)-1
+            mask_idx = np.where(self.mask.transpose([self.axes.index(ax)-1
                                                 for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
-            design_matrix = np.zeros((m, len(mask_idx)))
+            design_matrix = np.zeros((m, len(mask_idx)), dtype=topo_array.dtype)
             for i in range(m):
                 topo_array_c01 = topo_array[i].transpose([self.axes.index(ax)-1
                                                           for ax in ('c', 0, 1)])
@@ -492,3 +711,22 @@ class NIViewConverter(dense_design_matrix.DefaultViewConverter):
                                                      np.prod(topo_array.shape[1:])))
 
         return design_matrix
+
+class MRIViewConverterTransposed(MRIViewConverter):
+    """
+    Wrapper class to handler transposed datasets.
+    """
+
+    def design_mat_to_topo_view(self, design_matrix):
+        print design_matrix.shape
+        return super(MRIViewConverterTransposed, self).design_mat_to_topo_view(
+            design_matrix.T)
+
+    def design_mat_to_weights_view(self, design_matrix):
+        return super(MRIViewConverterTransposed, self).design_mat_to_weights_view(
+            design_matrix.T)
+
+    def topo_view_to_design_mat(self, topo_array):
+        design_mat = super(MRIViewConverterTransposed, self).topo_view_to_design_mat(
+            topo_array)
+        return design_mat.T
