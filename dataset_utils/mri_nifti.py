@@ -88,7 +88,7 @@ def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
         else:
             raise ValueError("Cannot parse subject data with dimensions %r" % subject_data.shape)
     
-    stdout.write("\rLoading subject from file: %s\n" % ('DONE' + ''*30))
+    stdout.write("\rLoading subject from file: %s\n" % ('DONE' + " "*30))
     assert data.shape[0] == len(labels)
     return data, labels
 
