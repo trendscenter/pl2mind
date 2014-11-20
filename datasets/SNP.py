@@ -187,7 +187,7 @@ class MultiChromosome(Dataset):
         space, source = self.data_specs
         subspaces = space.components
         subsources = source
-        mode = resolve_iterator_class("sequential")
+        mode = resolve_iterator_class("shuffled_sequential")
         if rng is None:
             rng = self.rng
         rng = None

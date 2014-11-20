@@ -2,18 +2,19 @@ import numpy as np
 from os import path
 
 prior_tolerance=0.1
-snp_dir = "/export/research/analysis/human/collaboration/SzImGen/IMPUTE/forsergey/readyforuse/chr1"
+snp_dir = "/export/research/analysis/human/collaboration/SzImGen/IMPUTE/forsergey/d_MCIC+COBRE1_realdata/chr1/"
+synth_dir = "/export/research/analysis/human/collaboration/SzImGen/IMPUTE/forsergey/d_MCIC+COBRE1_synthetic_n2000/chr1_synthetic/"
 
-controls_file = path.join(snp_dir, "chr1_risk_n1000.controls.gen")
+controls_file = path.join(synth_dir, "chr1_risk_n1000.controls.gen")
 controls = open(controls_file, "r")
 
-cases_file = path.join(snp_dir, "chr1_risk_n1000.cases.gen")
+cases_file = path.join(synth_dir, "chr1_risk_n1000.cases.gen")
 cases = open(cases_file, "r")
 
-subject_file = path.join(snp_dir, "chr1.tped")
+subject_file = path.join(snp_dir, "chr1_original.tped")
 subjects = open(subject_file, "r")
 
-bim_file = path.join(snp_dir, "chr1.bim")
+bim_file = path.join(snp_dir, "chr1_original.bim")
 bims = open(bim_file, "r")
 bim_lines = bims.readlines()
 minor_majors = {}
@@ -27,7 +28,7 @@ for line in bim_lines:
     assert major in "TCAG", "Bad major %s." % major 
     assert minor + major in "TTCCT" or "AAGGA"
     minor_majors[name] = (minor, major)
-
+"""
 leg_file = path.join(snp_dir, "chr1.leg")
 leg = open(leg_file, "r")
 for line in leg.readlines():
@@ -39,6 +40,7 @@ for line in leg.readlines():
     minor = parsed[2]
     major = parsed[3]
     assert minor_majors[name] == (minor, major)
+"""
 
 subject_lines = subjects.readlines()
 subject_values = {}
