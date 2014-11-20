@@ -21,6 +21,7 @@ from theano import config
 import warnings
 
 
+logging.basicConfig(format="[%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -718,7 +719,6 @@ class MRIViewConverterTransposed(MRIViewConverter):
     """
 
     def design_mat_to_topo_view(self, design_matrix):
-        print design_matrix.shape
         return super(MRIViewConverterTransposed, self).design_mat_to_topo_view(
             design_matrix.T)
 
