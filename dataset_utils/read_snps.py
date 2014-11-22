@@ -10,6 +10,7 @@ __email__ = "dhjelm@mrn.org"
 __maintainer__ = "Devon Hjelm"
 
 import argparse
+import copy
 import logging
 import gzip
 import numpy as np
@@ -109,7 +110,7 @@ def parse_tped_line(line):
     """
     try:
         elems = line.translate(None, '\n').split(" ")
-        assert (len(elems) - 4) % 2 == 0        
+        assert (len(elems) - 4) % 2 == 0
         chromosome = int(elems[0])
         SNP_name = elems[1]
         assert int(elems[2]) == 0, "Third element is not 0"
@@ -152,7 +153,7 @@ def parse_gen_line(line):
         assert major_allele in "TCAG", "Major allele not in TCAG"
         assert minor_allele != major_allele, "Minor and major allele are equal."
         location = int(location)
-        
+
         values = np.zeros((len(elems) - 5) // 3, dtype=np.int8)
         for j in range(5, len(elems), 3):
             for i in range(j, j+3):
@@ -214,7 +215,7 @@ def parse_file(file_name):
     ----------
     file_name: str
         Location of file to parse.
-    
+
     Returns
     -------
     parse_dict: dictionary
@@ -227,9 +228,9 @@ def parse_file(file_name):
         return
     if ext not in exts:
         raise NotImplementedError("Extension not supported (%s), must be in %s" % (ext, exts))
-    
+
     ignore = ["rsdummy"]
-    
+
     method_dict = {"bim": parse_bim_line,
                    "haps": parse_haps_line,
                    "tped": parse_tped_line,
@@ -269,20 +270,28 @@ def read_chr_directory(directory):
         file_name = path.join(directory, file_dict[ext])
         parse_dict = parse_file(file_name)
         snp_dict[ext] = parse_dict
+
+    if "tped" in snp_dict:
+        snp_dict["haps"] = dict(snp_dict["haps"][k] for k in snp_dict["haps"] if k in snp_dict["tped"])
+        snp_dict["bim"] = dict(snp_dict["bim"][k] for k in snp_dict["bim"] if k in snp_dict["tped"])
+
     if "haps" in snp_dict:
         assert "bim" in snp_dict
         for key in snp_dict["bim"]:
             if key == "ext": continue
 
             minor, major = [(snp_dict["haps"][key])[m] for m in ["minor", "major"]]
-            allele_1, allele_2 = [(snp_dict["bim"][key])[m] for m in ["allele_1", "allele_2"]]
+            minor_allele, major_allele = [(snp_dict["bim"][key])[m] for m in ["allele_1", "allele_2"]]
 
-            snp_dict["haps"][key]["minor_allele"] = allele_1
-            snp_dict["haps"][key]["major_allele"] = allele_2
-            
-            if "tped" in snp_dict and key in snp_dict["tped"]:
-                snp_dict["tped"][key]["minor_allele"] = allele_1
-                snp_dict["tped"][key]["major_allele"] = allele_2
+            if (minor, major) == (2, 1):
+                minor_allele, major_allele = major_allele, minor_allele
+
+            snp_dict["haps"][key]["minor_allele"] = minor_allele
+            snp_dict["haps"][key]["major_allele"] = major_allele
+
+            if "tped" in snp_dict:
+                snp_dict["tped"][key]["minor_allele"] = minor_allele
+                snp_dict["tped"][key]["major_allele"] = major_allele
     return snp_dict
 
 def parse_chr_directory(directory):
@@ -343,9 +352,9 @@ def parse_chr_directory(directory):
                 raise ValueError("%s not found in %s" % (key, directory))
         if "tped" not in file_dict:
             logger.warning("tped file not found in %s, process only with .haps" % directory)
-        
+
     logger.info("Parsed %s to %r" % (directory, file_dict))
-    return file_dict  
+    return file_dict
 
 def parse_dataset_directory(directory, chromosomes=22):
     directory = path.abspath(directory)
@@ -408,7 +417,7 @@ def pull_dataset(dataset_dict, chromosomes=22):
     ----------
     dataset_dict: dict
         Dictionary of chromosome or "labels" keys and file dictionary or labels values.
-    
+
     Returns
     -------
     data, labels: array-like, list
@@ -423,7 +432,7 @@ def pull_dataset(dataset_dict, chromosomes=22):
                 cases = dataset_dict[c]["cases"]
                 controls = dataset_dict[c]["controls"]
                 assert have_same_SNPs(cases, controls), "Cases and controls have different SNPs."
-                
+
                 cases_data = pull_gen_data(cases)
                 controls_data = pull_gen_data(controls)
 
@@ -500,7 +509,7 @@ def pull_tped_data(tped_dict, reference_names=None):
     Returns
     -------
     data: array-like
-    """    
+    """
     logger.info("Getting tped data.")
     samples = len(tped_dict[tped_dict.keys()[0]]["values"])
 
@@ -663,6 +672,60 @@ def A_is_compatible_reference_for_B(file_A, file_B):
     compatible = len(A_not_in_B) == 0
     return compatible
 
+def fill_A_with_B(file_A, file_B):
+    """
+    Fills A with missing SNPs from B.
+    Uses B priors to randomly set.
+    Note: tped dict_A will raise a ValueError.
+
+    Parameters
+    ----------
+    file_A: str or dict
+        File path or dictionary.
+    file_B: str or dict
+        File path or dictionary.
+
+    Returns
+    -------
+    dict_A, dict
+        Dicitonary of A with filled SNPs.
+    """
+    logger.info("Filling A with SNPs from B.")
+    if isinstance(file_A, str):
+        file_A = path.abspath(file_A)
+        dict_A = parse_file(file_A)
+    else:
+        assert isinstance(file_A, dict)
+        dict_A = file_A
+    if isinstance(file_B, str):
+        file_B = path.abspath(file_B)
+        dict_B = parse_file(file_B)
+    else:
+        assert isinstance(file_B, dict)
+        dict_B = file_B
+
+    if dict_A["ext"] == "tped":
+        raise ValueError("tped can not be filled currently.")
+
+    SNPs_A = set([k for k in dict_A.keys() if k != "ext"])
+    SNPs_B = set([k for k in dict_B.keys() if k != "ext"])
+    b_not_in_a = SNPs_B.difference(SNPs_A)
+
+    value_shape = dict_A[list(SNPs_A)[0]]["values"].shape
+    for SNP_name in list(b_not_in_a):
+        assert SNP_name not in dict_A
+        B_values = dict_B[SNP_name]["values"]
+        B_priors = [(B_values == i).sum(0) * 1. / B_values.shape[0] for i in range(3)]
+        dict_A[SNP_name] = copy.copy(dict_B[SNP_name])
+        dict_A[SNP_name]["values"] = np.random.choice(range(3), size=value_shape[0],
+                                                      p = B_priors)
+
+    SNPs_A = set([k for k in dict_A.keys() if k != "ext"])
+    b_not_in_a = SNPs_B.difference(SNPs_A)
+    assert len(b_not_in_a) == 0
+    logger.info("Filling completed.")
+    return dict_A
+
 def A_has_similar_priors_to_B(file_A, file_B):
     """
     Checks if file_A and file_B have similar priors.
@@ -709,8 +772,11 @@ def A_has_similar_priors_to_B(file_A, file_B):
     similar = True
     for i, (prior_A, prior_B) in enumerate(zip(priors_A, priors_B)):
         percent_off = (len(np.where(prior_A - prior_B > 0.15)[0].tolist()) * 1. / prior_A.shape[0])
+        percent_reversed = (len(np.where(np.logical_and(prior_A - priors_B[-(i - 1) + 1] <= 0.15, 
+                                                        prior_A - prior_B > 0.15))[0].tolist()) * 1. /prior_A.shape[0])
         if percent_off > .05:
             logger.warn("Priors P(%d) not close: %.2f%% off by 15%% or more" % (i, percent_off * 100))
+            logger.warn("Priors P(%d) reversed for %.2f%% of SNPs" % (i, percent_reversed * 100))
             similar = False
         else:
             logger.info("Priors P(%s) close: %.2f%% off by 15%% or more" % (i, percent_off * 100))
@@ -892,6 +958,7 @@ if __name__ == "__main__":
         B_lessthan_A = A_is_compatible_reference_for_B(dict_2, dict_1)
         print "%s can%s be used as a reference for %s"\
             % (args.dir_2, "" if B_lessthan_A else " not", args.dir_1)
+
         if A_is_aligned_to_B(dict_1, dict_2):
             print "A and B are aligned."
         else:
@@ -902,7 +969,8 @@ if __name__ == "__main__":
         elif B_lessthan_A:
             dict_1 = align_A_to_B(dict_1, dict_2)
         else:
-            raise ValueError()
+            dict_1 = fill_A_with_B(dict_1, dict_2)
+            dict_1 = align_A_to_B(dict_1, dict_2)
 
         if A_has_similar_priors_to_B(dict_1, dict_2):
             print "A and B have similar priors."
