@@ -156,5 +156,5 @@
         },
     ],
     save_path: "%(save_path)s/nice_smri.pkl",
-    save_freq: 10,
+    save_freq: 1,
 }

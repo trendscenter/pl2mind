@@ -109,13 +109,21 @@ def test_distribution(data, mask=None):
     k = kurtosis(data, axis=0)
     s = skew(data, axis=0) 
     
-    logger.info("Proportion voxels k <= -1: %.2f" % (len(np.where(k <= -1)[0].tolist()) * 1. / data.shape[1]))
-    logger.info("Proportion voxels -1 < k < 1: %.2f" % (len(np.where(np.logical_and(k > -1, k < 1))[0].tolist()) * 1. / data.shape[1]))
-    logger.info("Proportion voxels 1 < k < 2: %.2f" % (len(np.where(np.logical_and(k >= 1, k < 2))[0].tolist()) * 1. / data.shape[1]))
-    logger.info("Proportion voxels 2 < k < 3: %.2f" % (len(np.where(np.logical_and(k >= 2, k < 3))[0].tolist()) * 1. / data.shape[1]))
-    logger.info("Proportion voxels k >= 3: %.2f" % (len(np.where(k >= 3)[0].tolist()) * 1. / data.shape[1]))
+    logger.info("Proportion voxels k <= -1: %.2f"
+                % (len(np.where(k <= -1)[0].tolist()) * 1. / data.shape[1]))
+    logger.info("Proportion voxels -1 < k < 1: %.2f"
+                % (len(np.where(np.logical_and(k > -1, k < 1))[0].tolist()) * 1. / data.shape[1]))
+    logger.info("Proportion voxels 1 < k < 2: %.2f"
+                % (len(np.where(np.logical_and(k >= 1, k < 2))[0].tolist()) * 1. / data.shape[1]))
+    logger.info("Proportion voxels 2 < k < 3: %.2f"
+                % (len(np.where(np.logical_and(k >= 2, k < 3))[0].tolist()) * 1. / data.shape[1]))
+    logger.info("Proportion voxels k >= 3: %.2f"
+                % (len(np.where(k >= 3)[0].tolist()) * 1. / data.shape[1]))
 
     values = len(np.unique(data))
+    if (values * 1. / reduce(lambda x, y: x * y, data.shape) < 10e-4):
+        logger.warn("Quantization probable (%d unique values out of %d)."
+                    % (values, reduce(lambda x, y: x * y, data.shape)))
     logger.info("Number of unique values in data: %d" % values)
 
     logger.info("Krutosis k: %.2f (%.2f std) and skew s: %.2f (%.2f std)"

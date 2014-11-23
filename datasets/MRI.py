@@ -3,6 +3,7 @@ This module is for handling MRI datasets (sMRI and fMRI).
 TODO: handle functional aspects for fMRI here.
 """
 
+import functools
 import logging
 from nipy import load_image
 from nipy.core.api import Image
@@ -10,10 +11,16 @@ import numpy as np
 from os import path
 
 from pylearn2.datasets import control
+from pylearn2.datasets import Dataset
 from pylearn2.datasets import dense_design_matrix
+from pylearn2.space import CompositeSpace
 from pylearn2.utils import contains_nan
 from pylearn2.utils import safe_zip
 from pylearn2.utils import serial
+from pylearn2.utils.iteration import (
+    FiniteDatasetIterator,
+    resolve_iterator_class
+)
 from pylearn2.utils.rng import make_np_rng
 
 import sys
@@ -34,6 +41,16 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
     def __init__(self, X, y):
         if self.center:
             X -= X.mean()
+
+        if (self.unit_normalize and self.variance_normalize):
+            logger.warn("Unit and variance normalize have conflicting function."
+                        "Picking unit normalization. If you wish to use variance"
+                        "normalization, please set unit normalization to \"False\" (default)")
+
+        if self.unit_normalize:
+            X = (((X - np.amin(X)) / np.amax(X)) - .5) * 2
+            assert abs(np.amax(X) - 1) < 0.05, np.amax(X)
+            assert np.amin(X) == -1, np.amin(X)
 
         if self.variance_normalize:
             X -= X.mean(axis=0)
@@ -231,6 +248,67 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         image = Image.from_image(base_nifti, data=topo_view.transpose((1, 2, 3, 0)))
         return image
 
+    @functools.wraps(Dataset.iterator)
+    def iterator(self, mode=None, batch_size=None, num_batches=None,
+                 rng=None, data_specs=None,
+                 return_tuple=False):
+
+        if data_specs is None:
+            data_specs = self._iter_data_specs
+
+        # If there is a view_converter, we have to use it to convert
+        # the stored data for "features" into one that the iterator
+        # can return.
+        space, source = data_specs
+        if isinstance(space, CompositeSpace):
+            sub_spaces = space.components
+            sub_sources = source
+        else:
+            sub_spaces = (space,)
+            sub_sources = (source,)
+
+        convert = []
+        for sp, src in safe_zip(sub_spaces, sub_sources):
+            if src == 'features' and getattr(self, 'view_converter', None) is not None:
+                if self.corruptor is None:
+                    conv_fn = (lambda batch, self=self, space=sp:
+                                   self.view_converter.get_formatted_batch(batch,
+                                                                           space))
+                else:
+                    conv_fn = (lambda batch, self=self, space=sp:
+                                   self.corruptor._corrupt(
+                            self.view_converter.get_formatted_batch(batch,
+                                                                    space)))
+            else:
+                conv_fn = None
+
+            convert.append(conv_fn)
+
+        # TODO: Refactor
+        if mode is None:
+            if hasattr(self, '_iter_subset_class'):
+                mode = self._iter_subset_class
+            else:
+                raise ValueError('iteration mode not provided and no default '
+                                 'mode set for %s' % str(self))
+        else:
+            mode = resolve_iterator_class(mode)
+
+        if batch_size is None:
+            batch_size = getattr(self, '_iter_batch_size', None)
+        if num_batches is None:
+            num_batches = getattr(self, '_iter_num_batches', None)
+        if rng is None and mode.stochastic:
+            rng = self.rng
+        return FiniteDatasetIterator(self,
+                                     mode(self.X.shape[0],
+                                          batch_size,
+                                          num_batches,
+                                          rng),
+                                     data_specs=data_specs,
+                                     return_tuple=return_tuple,
+                                     convert=convert)
+
 
 class MRI_Standard(MRI):
     """
@@ -241,9 +319,11 @@ class MRI_Standard(MRI):
                  which_set,
                  center=False,
                  variance_normalize=False,
+                 unit_normalize=False,
                  shuffle=False,
                  apply_mask=False,
                  preprocessor=None,
+                 corruptor=None,
                  dataset_name="smri",
                  start=None,
                  stop=None):
@@ -326,6 +406,7 @@ class MRI_Transposed(MRI):
                  even_input=False,
                  center=False,
                  variance_normalize=False,
+                 unit_normalize=False,
                  shuffle=False,
                  apply_mask=False,
                  start=None,
@@ -648,7 +729,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
         expected_row_size = np.prod(self.shape)
         if self.mask is not None:
             mask_idx = np.where(self.mask.transpose([self.axes.index(ax)-1
-                                                for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
+                                                     for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
             assert self.mask.shape == self.shape
             r, c, d = self.mask.shape
             m = design_matrix.shape[0]

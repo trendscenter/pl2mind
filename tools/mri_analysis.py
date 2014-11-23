@@ -111,7 +111,7 @@ def get_features(model, zscore=True, transposed_features=False, dataset=None):
                    "(transposed data)" if transposed_features else ""))
     if isinstance(model, VAE):
         z = sharedX(np.eye(model.hid))
-        theano = model.decode_theta(z)
+        theta = model.decode_theta(z)
         features = theta[0].eval()
     elif isinstance(model, NICE):
         spectrum = model.encoder.layers[-1].D.get_value()
