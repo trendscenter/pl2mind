@@ -1,5 +1,5 @@
 """
-Module to train VAE on sMRI.
+Module to train NICE on sMRI.
 """
 
 import logging
@@ -27,11 +27,14 @@ def train(yaml_file, save_path, nvis, vn, center):
     yaml = yaml % hyperparams
     train_yaml(yaml)
 
-def train_vae():
+def train_nice():
     data_path = serial.preprocess("${PYLEARN2_NI_PATH}/smri")
     mask_file = path.join(data_path, "mask.npy")
     mask = np.load(mask_file)
-    input_dim = len(np.where(mask.flatten() == 1)[0].tolist())
+    input_dim = (mask == 1).sum()
+    if input_dim % 2 == 1:
+        input_dim -= 1
+    logging.info("Input shape: %d" % input_dim)
     del mask
     
     vn = False
@@ -43,4 +46,4 @@ def train_vae():
     train(yaml_file, save_path, input_dim, vn, center)
 
 if __name__ == "__main__":
-    train_vae()
+    train_nice()

@@ -2,8 +2,9 @@
 !obj:pylearn2.train.Train {
     dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Standard {
         which_set: "train",
-        center: &center %(center)r,
-        variance_normalize: &vn %(vn)r,
+        center: &center False,
+        even_input: &ei True,
+        unit_normalize: &un True,
         apply_mask: &app_mask True,
         dataset_name: &ds_name "smri"
     },
@@ -125,10 +126,11 @@
         },
         monitoring_dataset: {
             'train' : *data,
-            'valid': !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_On_Memory {
+            'valid': !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Standard {
                 which_set: "test",
                 center: *center,
-                variance_normalize: *vn,
+                even_input: *ei,
+                unit_normalize: *un,
                 apply_mask: *app_mask,
                 dataset_name: *ds_name
                 },
@@ -156,5 +158,5 @@
         },
     ],
     save_path: "%(save_path)s/nice_smri.pkl",
-    save_freq: 1,
+    save_freq: 10,
 }

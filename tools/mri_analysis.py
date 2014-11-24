@@ -10,6 +10,7 @@ matplotlib.use("Agg")
 import nipy
 import numpy as np
 from os import path
+from matplotlib import pyplot as plt
 
 from pylearn2.config import yaml_parse
 from pylearn2.neuroimaging_utils.datasets.MRI import MRI
@@ -115,7 +116,7 @@ def get_features(model, zscore=True, transposed_features=False, dataset=None):
         features = theta[0].eval()
     elif isinstance(model, NICE):
         spectrum = model.encoder.layers[-1].D.get_value()
-        idx = np.argsort(spectrum).tolist()[::-1]
+        idx = np.argsort(spectrum).tolist()
         num_features = len(idx)
         idx = idx[:100]
         z = np.zeros((len(idx), num_features))
@@ -146,6 +147,17 @@ def get_features(model, zscore=True, transposed_features=False, dataset=None):
 
     return features
 
+
+def nice_spectrum(model):
+    logger.info("Getting NICE spectrum")
+    if not isinstance(model, NICE):
+        raise NotImplementedError("No spectrum analysis available for %r" % type(model))
+
+    spectrum = model.encoder.layers[-1].D.get_value()
+    spectrum = np.sort(spectrum)
+    spectrum = np.exp(-spectrum)
+    return spectrum
+
 def main(model_path, out_path, args):
     """
     Main function of moduel.
@@ -160,6 +172,9 @@ def main(model_path, out_path, args):
     args: dict
         argparse arguments (defined below).
     """
+    if args.prefix is None:
+        prefix = ".".join(path.basename(model_path).split(".")[:-1])
+
     logger.info("Loading model from %s" % model_path)
     model = serial.load(model_path)
     logger.info("Extracting dataset")
@@ -168,9 +183,16 @@ def main(model_path, out_path, args):
         transposed_features = True
     else:
         transposed_features = False
+
+    if isinstance(model, NICE):
+        spectrum_path = path.join(out_path, prefix + "_spec.pdf")
+        f = plt.figure()
+        spectrum = nice_spectrum(model)
+        plt.plot(spectrum)
+        f.savefig(spectrum_path)
+        
+    logger.info("Getting features")
     features = get_features(model, args.zscore, transposed_features, dataset)
-    if args.prefix is None:
-        prefix = ".".join(path.basename(model_path).split(".")[:-1])
     nifti_path = path.join(out_path, prefix + ".nii")
     pdf_path = path.join(out_path, prefix + ".pdf")
     nifti = get_nifti(dataset, features, out_file=nifti_path)

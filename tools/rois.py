@@ -245,14 +245,14 @@ def find_rois(nifti, fnifti, thr):
             coords = tuple([cs[x] for x in [7, 8, 9]])
 
             rois = find_region_names(coords)
-            grey_value = check_grey(coords)
+#            grey_value = check_grey(coords)
 
             clust_dict[c] = {'coords': coords,
                              'volume': cs[0],
                              'cm': cm,
                              'mean_intensity': abs(cs[6]),
-                             'rois': rois,
-                             'grey_value': grey_value}
+                             'rois': rois,}
+#                             'grey_value': grey_value}
 
         # Given the cluster information found above, we find the "top" cluster.
         # The maximum clister is given by the one with the highest mean intensity * volume.

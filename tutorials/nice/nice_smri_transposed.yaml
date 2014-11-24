@@ -2,7 +2,8 @@
 !obj:pylearn2.train.Train {
     dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Transposed {
         dataset_name: &ds_name "smri",
-        center: &center True,
+        center: &center False,
+        unit_normalize: &un False,
         apply_mask: True,
         even_input: &even_input True,
     },

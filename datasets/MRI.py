@@ -276,7 +276,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                                                                            space))
                 else:
                     conv_fn = (lambda batch, self=self, space=sp:
-                                   self.corruptor._corrupt(
+                                   self.distorter._distort(
                             self.view_converter.get_formatted_batch(batch,
                                                                     space)))
             else:
@@ -317,13 +317,14 @@ class MRI_Standard(MRI):
     
     def __init__(self,
                  which_set,
+                 even_input=False,
                  center=False,
                  variance_normalize=False,
                  unit_normalize=False,
                  shuffle=False,
                  apply_mask=False,
                  preprocessor=None,
-                 corruptor=None,
+                 distorter=None,
                  dataset_name="smri",
                  start=None,
                  stop=None):
@@ -345,11 +346,21 @@ class MRI_Standard(MRI):
             mask = self.get_mask(dataset_name)
         else:
             mask = None
+
+        if self.even_input:
+            assert mask is not None
+            if (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 1:
+                logger.warn("Removing one voxel to mask to even input.")
+                ons = np.where(mask == 1)
+                i, j, k = (ons[r][0] for r in range(3))
+                mask[i, j, k] = 0
+                assert (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 0
             
         X = self.set_mri_topological_view(topo_view, mask=mask)
+        if even_input:
+            assert X.shape[1] % 2 == 0
 
-        super(MRI_Standard, self).__init__(X=X, y=y)
-       
+        super(MRI_Standard, self).__init__(X=X, y=y)       
 
     def set_mri_topological_view(self, topo_view, mask=None, axes=('b', 0, 1, 'c')):
         """
@@ -409,6 +420,7 @@ class MRI_Transposed(MRI):
                  unit_normalize=False,
                  shuffle=False,
                  apply_mask=False,
+                 distorter=None,
                  start=None,
                  stop=None):
 
@@ -728,7 +740,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
 
         expected_row_size = np.prod(self.shape)
         if self.mask is not None:
-            mask_idx = np.where(self.mask.transpose([self.axes.index(ax)-1
+            mask_idx = np.where(self.mask.transpose([self.axes.index(ax) - 1
                                                      for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
             assert self.mask.shape == self.shape
             r, c, d = self.mask.shape
@@ -779,11 +791,11 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
 
         if self.mask is not None:
             m = topo_array.shape[0]
-            mask_idx = np.where(self.mask.transpose([self.axes.index(ax)-1
+            mask_idx = np.where(self.mask.transpose([self.axes.index(ax) - 1
                                                 for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
             design_matrix = np.zeros((m, len(mask_idx)), dtype=topo_array.dtype)
             for i in range(m):
-                topo_array_c01 = topo_array[i].transpose([self.axes.index(ax)-1
+                topo_array_c01 = topo_array[i].transpose([self.axes.index(ax) - 1
                                                           for ax in ('c', 0, 1)])
                 design_matrix[i] = topo_array_c01.flatten()[mask_idx]
         else:
