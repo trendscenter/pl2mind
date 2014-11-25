@@ -51,15 +51,23 @@ class TestMRI:
                        mri_test.X)
         check_datasets(labels[test_idx], mri_test.y.flatten())
 
-    def test_mask(self, transposed=False):
+    def test_mask_with_evening(self):
+        self.test_mask(even_input=True)
+
+    def test_mask(self, transposed=False, even_input=False):
         mask = np.load(self.mask_path)
         rows, columns, depth = mask.shape
         if not transposed:
-            mri = MRI_Standard("test", apply_mask=True, dataset_name="smri")
+            mri = MRI_Standard("test", apply_mask=True, dataset_name="smri", even_input=even_input)
         else:
-            mri = MRI_Transposed("test", apply_mask=True, dataset_name="smri")
+            mri = MRI_Transposed("test", apply_mask=True, dataset_name="smri", even_input=even_input)
 
         topo_view = mri.get_topological_view()
+        if even_input:
+            ons = np.where(mask == 1)
+            i, j, k = (ons[r][0] for r in range(3))
+            mask[i, j, k] = 0
+
         X = mri.X
         samples = topo_view.shape[0]
         assert topo_view.shape == (samples, rows, columns, depth)

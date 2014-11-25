@@ -111,7 +111,7 @@ def get_features(model, zscore=True, transposed_features=False, dataset=None):
                    type(model),
                    "(transposed data)" if transposed_features else ""))
     if isinstance(model, VAE):
-        z = sharedX(np.eye(model.hid))
+        z = sharedX(np.eye(model.nhid))
         theta = model.decode_theta(z)
         features = theta[0].eval()
     elif isinstance(model, NICE):

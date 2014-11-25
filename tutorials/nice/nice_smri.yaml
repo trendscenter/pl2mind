@@ -3,7 +3,7 @@
     dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Standard {
         which_set: "train",
         center: &center False,
-        even_input: &ei True,
+        even_input: &ei False,
         unit_normalize: &un True,
         apply_mask: &app_mask True,
         dataset_name: &ds_name "smri"
@@ -120,7 +120,7 @@
     },
     algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
         batch_size: 10,
-        learning_rate: 4e-4,
+        learning_rate: 5e-4,
         learning_rule: !obj:nice.pylearn2.training_algorithms.learning_rule.RMSPropMomentum {
             init_momentum: 0.00,
         },

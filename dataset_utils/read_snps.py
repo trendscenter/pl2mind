@@ -249,7 +249,7 @@ def parse_file(file_name):
             parse_dict[entry[0]] = entry[1]
     return parse_dict
 
-def read_chr_directory(directory):
+def read_chr_directory(directory, flip=True):
     """
     Read a directory with SNP data.
     Extras data and other details from SNP files.
@@ -272,8 +272,8 @@ def read_chr_directory(directory):
         snp_dict[ext] = parse_dict
 
     if "tped" in snp_dict:
-        snp_dict["haps"] = dict(snp_dict["haps"][k] for k in snp_dict["haps"] if k in snp_dict["tped"])
-        snp_dict["bim"] = dict(snp_dict["bim"][k] for k in snp_dict["bim"] if k in snp_dict["tped"])
+        snp_dict["haps"] = dict((k, snp_dict["haps"][k]) for k in snp_dict["haps"].keys() if k in snp_dict["tped"].keys())
+        snp_dict["bim"] = dict((k, snp_dict["bim"][k]) for k in snp_dict["bim"].keys() if k in snp_dict["tped"].keys())
 
     if "haps" in snp_dict:
         assert "bim" in snp_dict
@@ -283,7 +283,7 @@ def read_chr_directory(directory):
             minor, major = [(snp_dict["haps"][key])[m] for m in ["minor", "major"]]
             minor_allele, major_allele = [(snp_dict["bim"][key])[m] for m in ["allele_1", "allele_2"]]
 
-            if (minor, major) == (2, 1):
+            if (minor, major) == (2, 1) and flip:
                 minor_allele, major_allele = major_allele, minor_allele
 
             snp_dict["haps"][key]["minor_allele"] = minor_allele
@@ -335,7 +335,7 @@ def parse_chr_directory(directory):
             # Gen directories will have 2 haps files...
             if not "cases" in f_name:
                 insert(ext, f_name)
-        elif ext in ["bim", "ped", "gen"]:
+        elif ext in ["bim", "ped", "gen", "tped"]:
             insert(ext, f_name)
         elif ext == "tped":
             logger.warn("tpeds ignored for now.")
@@ -935,9 +935,11 @@ if __name__ == "__main__":
 
     if args.which == "compare":
         dir_dict_1 = read_chr_directory(args.dir_1)
-        dir_dict_2 = read_chr_directory(args.dir_2)
+        dir_dict_2 = read_chr_directory(args.dir_2, flip=False)
         def get_dict(dir_dict):
-            if "haps" in dir_dict:
+            if "tped" in dir_dict:
+                return dir_dict["tped"]
+            elif "haps" in dir_dict:
                 return dir_dict["haps"]
             elif "cases" in dir_dict:
                 return dir_dict["cases"]

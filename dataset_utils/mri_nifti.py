@@ -180,7 +180,7 @@ def save_mask(data, out_dir):
             if abs(zero_freq.mean() - freq) > .05:
                 raise ValueError("Spurious datapoint, mean zeros frequency is %.2f,"
                                  "datapoint is %.2f" % (zero_freq.mean(), freq))
-        mask[np.where(np.invert((data < 0.05).sum(0) > .01 * data.shape[0]))] = 1 
+        mask[np.where(np.invert((data < 0.07).sum(0) > .01 * data.shape[0]))] = 1 
     else:
         logger.info("Deriving mask from mean image.")
         mask[np.where(data.mean(axis=0) > data.mean())] = 1
