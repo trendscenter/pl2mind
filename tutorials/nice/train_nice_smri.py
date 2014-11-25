@@ -42,7 +42,9 @@ def train_nice():
 
     p = path.abspath(path.dirname(__file__))
     yaml_file = path.join(p, "nice_smri.yaml")
-    save_path = "/export/mialab/users/$USER/pylearn2_outs/"
+    user = path.expandvars("$USER")
+    save_path = serial.preprocess("/export/mialab/users/%s/pylearn2_outs/" % user)
+    assert path.isdir(save_path)
     train(yaml_file, save_path, input_dim, vn, center)
 
 if __name__ == "__main__":

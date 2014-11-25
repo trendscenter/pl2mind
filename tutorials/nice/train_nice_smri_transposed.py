@@ -1,5 +1,5 @@
 """
-Module to train VAE on sMRI.
+Module to train NICE on sMRI.
 """
 
 import numpy as np
@@ -32,7 +32,9 @@ def train_nice():
 
     p = path.abspath(path.dirname(__file__))
     yaml_file = path.join(p, "nice_smri_transposed.yaml")
-    save_path = "/export/mialab/users/$USER/pylearn2_outs/"
+    user = path.expandvars("$USER")
+    save_path = serial.preprocess("/export/mialab/users/%s/pylearn2_outs/" % user)
+    assert path.isdir(save_path)
     train(yaml_file, save_path, input_dim)
 
 if __name__ == "__main__":
