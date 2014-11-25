@@ -28,7 +28,7 @@ from theano import config
 import warnings
 
 
-logging.basicConfig(format="[%(levelname)s]:%(message)s")
+logging.basicConfig(format="[%(name)s:%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -169,7 +169,9 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         if self.view_converter is None:
             raise NotImplementedError("Tried to call get_weights_view on a dataset "
                             "that has no view converter.")
-
+        if self.X.shape[1] != mat.shape[1]:
+            raise ValueError("mat samples have different size than data: "
+                             "%d vs %d" % (mat.shape[1], self.X.shape[1]))
         weights_view = self.view_converter.design_mat_to_weights_view(mat)
         return weights_view
 
@@ -357,6 +359,8 @@ class MRI_Standard(MRI):
                 assert (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 0
             
         X = self.set_mri_topological_view(topo_view, mask=mask)
+        logger.info("Masked shape is %r" % (X.shape,))
+        assert X.shape[1] == (mask == 1).sum()
         if even_input:
             assert X.shape[1] % 2 == 0
 
