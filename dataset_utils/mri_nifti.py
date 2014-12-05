@@ -66,10 +66,6 @@ def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
 
     h_files, sz_files = pull_niftis(source_directory, h_pattern, sz_pattern)
 
-    labels = [0] * len(h_files) + [1] * len(sz_files)
-    assert len([i for i in labels if i == 0]) == len(h_files)
-    assert len([i for i in labels if i == 1]) == len(sz_files)
-
     data0 = load_image(h_files[0]).get_data()
     if len(data0.shape) == 3:
         x, y, z = data0.shape
@@ -81,6 +77,10 @@ def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
 
     dt = (len(h_files) + len(sz_files)) * t
     data = np.zeros((dt, x, y, z))
+
+    labels = [0] * (len(h_files) * t) + [1] * (len(sz_files) * t)
+    assert len([i for i in labels if i == 0]) == len(h_files) * t
+    assert len([i for i in labels if i == 1]) == len(sz_files) * t
 
     for i, f in enumerate(h_files + sz_files):
         logger.info("Loading subject from file: %s%s" % (f, '' * 30))
@@ -189,12 +189,13 @@ def save_mask(data, out_dir):
     np.save(mask_path, mask)
     return mask
 
-def main(source_directory, out_dir, h_pattern=None, sz_pattern=None):
+def main(source_directory, out_dir, h_pattern=None, sz_pattern=None, args):
     data, labels = read_niftis(source_directory,
                                h_pattern=h_pattern,
                                sz_pattern=sz_pattern)
     mask = save_mask(data, out_dir)
-    test_distribution(data, mask)
+    if args.verbose:
+        test_distribution(data, mask)
     split_save_data(data, labels, .80, out_dir)
 
 def make_argument_parser():
@@ -204,7 +205,7 @@ def make_argument_parser():
     """
 
     parser = argparse.ArgumentParser()
-
+ 
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Show more verbosity!")
     parser.add_argument("--h", default="H*", help="healthy subject file pattern.")
@@ -226,4 +227,4 @@ if __name__ == "__main__":
     out_dir = serial.preprocess("${PYLEARN2_NI_PATH}" + args.out)
     assert path.isdir(out_dir), "No output directory found (%s), you must make it" % out_dir
     
-    main(args.source_directory, out_dir, h_pattern=args.h, sz_pattern=args.sz)
+    main(args.source_directory, out_dir, h_pattern=args.h, sz_pattern=args.sz, args)

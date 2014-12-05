@@ -16,13 +16,14 @@ def train_yaml(yaml_file):
     train = yaml_parse.load(yaml_file)
     train.main_loop()
 
-def train(yaml_file, save_path, nvis, vn, center):
+def train(yaml_file, save_path, nvis, vn, center, variance_map_file):
     yaml = open(yaml_file, "r").read()
     hyperparams = {"nvis": nvis,
                    "half_nvis": nvis // 2,
                    "center": center,
                    "vn": vn,
-                   "save_path": save_path
+                   "save_path": save_path,
+                   "variance_map_file": variance_map_file
                    }
     yaml = yaml % hyperparams
     train_yaml(yaml)
@@ -45,7 +46,8 @@ def train_nice():
     user = path.expandvars("$USER")
     save_path = serial.preprocess("/export/mialab/users/%s/pylearn2_outs/" % user)
     assert path.isdir(save_path)
-    train(yaml_file, save_path, input_dim, vn, center)
+    variance_map_file = path.join(data_path, "variance_map.npy")
+    train(yaml_file, save_path, input_dim, vn, center, variance_map_file)
 
 if __name__ == "__main__":
     train_nice()

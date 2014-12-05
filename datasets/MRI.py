@@ -10,9 +10,13 @@ from nipy.core.api import Image
 import numpy as np
 from os import path
 
+from pylearn2 import corruption
 from pylearn2.datasets import control
 from pylearn2.datasets import Dataset
 from pylearn2.datasets import dense_design_matrix
+
+from pylearn2.neuroimaging_utils.datasets import dataset_info
+
 from pylearn2.space import CompositeSpace
 from pylearn2.utils import contains_nan
 from pylearn2.utils import safe_zip
@@ -22,14 +26,68 @@ from pylearn2.utils.iteration import (
     resolve_iterator_class
 )
 from pylearn2.utils.rng import make_np_rng
+from pylearn2.utils import sharedX
 
 import sys
+import theano
 from theano import config
 import warnings
 
 
 logging.basicConfig(format="[%(name)s:%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
+
+
+class GaussianMRICorruptor(corruption.Corruptor):
+    """
+    A Gaussian corruptor transforms inputs by adding zero mean non-isotropic
+    noise.
+    Parameters
+    ----------
+    stdev : WRITEME
+    rng : WRITEME
+    """
+
+    def __init__(self, stdev, variance_map, rng=2001):
+#        variance_map = np.load(variance_map)
+        self.variance_map = sharedX(variance_map)
+        super(GaussianMRICorruptor, self).__init__(corruption_level=stdev,
+                                                rng=rng)
+
+    def _corrupt(self, x):
+        """
+        Corrupts a single tensor_like object.
+        Parameters
+        ----------
+        x : tensor_like
+            Theano symbolic representing a (mini)batch of inputs to be
+            corrupted, with the first dimension indexing training
+            examples and the second indexing data dimensions.
+        Returns
+        -------
+        corrupted : tensor_like
+            Theano symbolic representing the corresponding corrupted input.
+        """
+        noise = self.s_rng.normal(
+            size=x.shape,
+            avg=0.,
+            std=self.corruption_level,
+            dtype=theano.config.floatX
+        )
+
+        return noise * self.variance_map + x
+
+    def corruption_free_energy(self, corrupted_X, X):
+        """
+        .. todo::
+            WRITEME
+        """
+        axis = range(1, len(X.type.broadcastable))
+
+        rval = (T.sum(T.sqr(corrupted_X - X), axis=axis) /
+                (2. * (self.corruption_level ** 2.)))
+        assert len(rval.type.broadcastable) == 1
+        return rval
 
 
 class MRI(dense_design_matrix.DenseDesignMatrix):
@@ -39,6 +97,14 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
     """
 
     def __init__(self, X, y):
+        if self.dataset_name in dataset_info.aod_datasets and self.which_set == "full":
+            self.targets, self.novels = self.load_aod_gts()
+            assert self.targets.shape == self.novels.shape
+            if X.shape[0] % self.targets.shape[0] != 0:
+                raise ValueError("AOD data and targets seems to have "
+                                 "incompatible shapes: %r vs %r"
+                                 % (X.shape, self.targets.shape))
+
         if self.center:
             X -= X.mean()
 
@@ -48,8 +114,10 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                         "normalization, please set unit normalization to \"False\" (default)")
 
         if self.unit_normalize:
-            X = (((X - np.amin(X)) / np.amax(X)) - .5) * 2
-            assert abs(np.amax(X) - 1) < 0.05, np.amax(X)
+            X -= X.min()
+            X /= X.max()
+            X = (X - .5) * 2
+            assert abs(np.amax(X) - 1) < 0.08, np.amax(X)
             assert np.amin(X) == -1, np.amin(X)
 
         if self.variance_normalize:
@@ -113,6 +181,17 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                                                             serial.preprocess(p)))
         return data_path, label_path
 
+    def load_aod_gts(self):
+        p = "${PYLEARN2_NI_PATH}/aod_extra/"
+
+        if not(path.isdir(serial.preprocess(p))):
+            raise IOError("AOD extras directory %s not found."
+                          % serial.preprocess(p))
+
+        targets = np.load(serial.preprocess(p + "targets.npy"))
+        novels = np.load(serial.preprocess(p + "novels.npy"))
+        return targets, novels
+
     def get_mask(self, dataset_name):
         """
         Get mask for dataset.
@@ -169,9 +248,9 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         if self.view_converter is None:
             raise NotImplementedError("Tried to call get_weights_view on a dataset "
                             "that has no view converter.")
-        if self.X.shape[1] != mat.shape[1]:
-            raise ValueError("mat samples have different size than data: "
-                             "%d vs %d" % (mat.shape[1], self.X.shape[1]))
+#        if self.X.shape[1] != mat.shape[1]:
+#            raise ValueError("mat samples have different size than data: "
+#                             "%d vs %d" % (mat.shape[1], self.X.shape[1]))
         weights_view = self.view_converter.design_mat_to_weights_view(mat)
         return weights_view
 
@@ -439,13 +518,14 @@ class MRI_Transposed(MRI):
 
         logger.info("Loading %s data from %s." % (which_set, dataset_name))
         topo_view = np.load(data_file)
-        y = np.atleast_2d(np.load(label_file))
+        y = np.atleast_2d(np.load(label_file)).T
         logger.info("Dataset shape is %r" % (topo_view.shape,))
 
         if even_input and topo_view.shape[0] % 2 == 1:
             logger.info("Evening input from %d to %d."
                         % (topo_view.shape[0], topo_view.shape[0] // 2 * 2))
             topo_view = topo_view[:topo_view.shape[0] // 2 * 2]
+            y = y[:y.shape[0] // 2 * 2]
 
         if apply_mask:
             mask = self.get_mask(dataset_name)

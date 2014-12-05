@@ -3,6 +3,7 @@ from math import ceil
 
 import matplotlib
 matplotlib.use('Agg')
+from matplotlib.patches import FancyBboxPatch
 from matplotlib import pylab as plt
 from matplotlib import rc
 
@@ -39,8 +40,9 @@ cdict = {'red': ((0.0, 0.0, 0.0),
 
 cmap = matplotlib.colors.LinearSegmentedColormap('my_colormap',cdict,256)
 
-def montage(nifti, anat, roi_dict,
-            thr=2, fig=None, out_file=None):
+def montage(nifti, anat, roi_dict, thr=2,
+            fig=None, out_file=None, feature_dict=None,
+            target_stat=None, target_value=None):
     if isinstance(anat, str):
         anat = load_image(anat)
     assert nifti is not None
@@ -49,8 +51,8 @@ def montage(nifti, anat, roi_dict,
 
     texcol = 1
     bgcol = 0
-    iscale=2
-    weights = nifti.get_data(); weights /= weights.std()
+    iscale = 2
+    weights = nifti.get_data(); #weights = weights / weights.std(axis=3)
     features = weights.shape[-1]
 
     indices = [0]        
@@ -63,7 +65,7 @@ def montage(nifti, anat, roi_dict,
     if fig is None:
         fig = plt.figure(figsize=[iscale * y, iscale * x / 2.5])
     plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, wspace=0.1, hspace=0)
-   
+
     for f in xrange(features):
         roi = roi_dict.get(f, None)
         if roi is None:
@@ -75,6 +77,7 @@ def montage(nifti, anat, roi_dict,
         stdout.flush()
             
         feat = weights[:, :, :, f]
+        feat = feat / feat.std()
         imax = np.max(np.absolute(feat)); imin = -imax
         imshow_args = {'vmax': imax, 'vmin': imin}
          
@@ -106,6 +109,27 @@ def montage(nifti, anat, roi_dict,
                  transform=ax.transAxes,
                  horizontalalignment='center',
                  color=(texcol,texcol,texcol))
+        pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
+        colors = ["purple", "yellow", "green"]
+        if feature_dict is not None and feature_dict.get(f, None) is not None:
+            d = feature_dict[f]
+            for i, key in enumerate([k for k in d if k != "real_id"]):
+                plt.text(pos[i][0], pos[i][1], "%s=%.2f" % (key, d[key]) ,transform=ax.transAxes,
+                         horizontalalignment="left", color=colors[i])
+                if key == target_stat:
+                    assert target_value is not None
+                    if d[key] >= target_value:
+                        p_fancy = FancyBboxPatch((0.1, 0.1), 2.5 - .1, 1 - .1,
+                                                 boxstyle="round,pad=0.1",
+                                                 ec=(1., 0.5, 1.),
+                                                 fc="none")
+                        ax.add_patch(p_fancy)
+                    elif d[key] <= -target_value:
+                        p_fancy = FancyBboxPatch((0.1, 0.1), iscale * 2.5 - .1, iscale - .1,
+                                                 boxstyle="round,pad=0.1",
+                                                 ec=(0., 0.5, 0.),
+                                                 fc="none")
+                        ax.add_patch(p_fancy)
     
     stdout.write("\rSaving montage: DONE\n")
     if out_file is not None:
