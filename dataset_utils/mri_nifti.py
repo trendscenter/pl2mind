@@ -10,10 +10,10 @@ __email__ = "dhjelm@mrn.org"
 __maintainer__ = "Devon Hjelm"
 
 import argparse
-import numpy as np
 from glob import glob
 import logging
 from nipy import save_image, load_image
+import numpy as np
 import os
 from os import path
 from random import shuffle

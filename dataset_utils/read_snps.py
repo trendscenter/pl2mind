@@ -249,7 +249,7 @@ def parse_file(file_name):
             parse_dict[entry[0]] = entry[1]
     return parse_dict
 
-def read_chr_directory(directory, flip=True):
+def read_chr_directory(directory):
     """
     Read a directory with SNP data.
     Extras data and other details from SNP files.
@@ -283,7 +283,7 @@ def read_chr_directory(directory, flip=True):
             minor, major = [(snp_dict["haps"][key])[m] for m in ["minor", "major"]]
             minor_allele, major_allele = [(snp_dict["bim"][key])[m] for m in ["allele_1", "allele_2"]]
 
-            if (minor, major) == (2, 1) and flip:
+            if (minor, major) == (2, 1):
                 minor_allele, major_allele = major_allele, minor_allele
 
             snp_dict["haps"][key]["minor_allele"] = minor_allele
@@ -871,7 +871,7 @@ def align_A_to_B(file_A, file_B):
         if minor_A == minor_B and major_A == major_B:
             pass
         elif minor_A == major_B and major_A == minor_B:
-            if dict_A["ext"] in ["tped", "gen"]:
+            if dict_A["ext"] in ["haps", "gen"]:
                 dict_A[SNP_name]["values"] = (-(dict_A[SNP_name]["values"] - 1)) + 1
             dict_A[SNP_name]["minor_allele"] = dict_B[SNP_name]["minor_allele"]
             dict_A[SNP_name]["major_allele"] = dict_B[SNP_name]["major_allele"]
@@ -935,7 +935,7 @@ if __name__ == "__main__":
 
     if args.which == "compare":
         dir_dict_1 = read_chr_directory(args.dir_1)
-        dir_dict_2 = read_chr_directory(args.dir_2, flip=False)
+        dir_dict_2 = read_chr_directory(args.dir_2)
         def get_dict(dir_dict):
             if "tped" in dir_dict:
                 return dir_dict["tped"]

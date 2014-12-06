@@ -34,7 +34,7 @@ from theano import config
 import warnings
 
 
-logging.basicConfig(format="[%(name)s:%(levelname)s]:%(message)s")
+logging.basicConfig(format="[%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -512,7 +512,8 @@ class MRI_Transposed(MRI):
         logger.info("Setting up transposed MRI dataset.")
 
         if which_set != "full":
-            warnings.warn("Only full dataset appropriate for transpose.")
+            warnings.warn("Only full dataset appropriate for transpose, setting to full.")
+            which_set = "full"
         
         data_file, label_file = self.resolve_dataset(which_set, dataset_name)
 
@@ -522,7 +523,7 @@ class MRI_Transposed(MRI):
         logger.info("Dataset shape is %r" % (topo_view.shape,))
 
         if even_input and topo_view.shape[0] % 2 == 1:
-            logger.info("Evening input from %d to %d."
+            logger.info("Evening input from %d to %d with mask."
                         % (topo_view.shape[0], topo_view.shape[0] // 2 * 2))
             topo_view = topo_view[:topo_view.shape[0] // 2 * 2]
             y = y[:y.shape[0] // 2 * 2]
