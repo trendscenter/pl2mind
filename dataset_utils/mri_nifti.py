@@ -16,7 +16,10 @@ from nipy import save_image, load_image
 import numpy as np
 import os
 from os import path
+import pickle
 from random import shuffle
+import re
+from scipy import io
 from scipy.stats import kurtosis
 from scipy.stats import skew
 import sys
@@ -27,7 +30,12 @@ from pylearn2.utils import serial
 logging.basicConfig(format="[%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
-def pull_niftis(source_directory, h_pattern, sz_pattern):
+def natural_sort(l): 
+    convert = lambda text: int(text) if text.isdigit() else text.lower() 
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
+    return sorted(l, key = alphanum_key)
+
+def pull_niftis(source_directory, *args):
     """
     Pull healthy and schizophrenia nitfi files from a source_directory. Uses glob to get multiple files.
     
@@ -35,38 +43,52 @@ def pull_niftis(source_directory, h_pattern, sz_pattern):
     ----------
     source_directory: string
         Source directory of nifti files.
-    h_pattern: string
-        unix-style regex string
-    sz_pattern: string
-        unix-stule regex string.
+    *args: list of strings or lists. optional
+        Either a string for use with glob or a list of files. If a string is passed, then the list of files
+        will be derived from glob.
 
     Returns
     -------
-    pair of lists.  healthy files, schizophrenia files.
+    list of lists. Each a list of files for each class.
     """
+    if len(args) == 0:
+        file_lists = [glob(path.join(source_directory, "*.nii"))]
+    else:
+        file_lists = []
+        for arg in args:
+            if isinstance(arg, list):
+                if len(arg) == 0:
+                    logger.warn("File list is empty.")
+                file_list = []
+                for file_name in arg:
+                    if source_directory in file_name:
+                        file_list.append(file_name)
+                    else:
+                        file_list.append(path.join(source_directory, file_name))
+                file_lists.append(file_list)
+            elif isinance(arg, str):
+                file_list = glob(path.join(source_directory, arg))
+                if len(file_list) == 0: 
+                    logger.warn("Files are empty with pattern %s" % 
+                                path.join(source_directory, arg))
+                file_lists.append(file_list)
+            else:
+                raise ValueError("%s type not supported" % type(arg))
 
-    h_pattern = h_pattern if h_pattern else "H*"
-    sz_pattern = sz_pattern if sz_pattern else "S*"
-    h_files = glob(path.join(source_directory, h_pattern))
-    sz_files = glob(path.join(source_directory, sz_pattern))
+    for file_list in file_lists:
+        for file_name in file_list:
+            assert source_directory in file_name, file_name
 
-    if len(h_files) == 0: 
-        logger.warn("Healthy files are empty with pattern %s" % 
-                    path.join(source_directory, h_pattern))
-    if len(sz_files) == 0:
-        logger.warn("SZ files are empty with pattern %s" %
-                    path.join(source_directory, sz_pattern))
+    return file_lists
 
-    return h_files, sz_files
-
-def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
+def read_niftis(source_directory, *args):
     """
     Read niftis.
     """
 
-    h_files, sz_files = pull_niftis(source_directory, h_pattern, sz_pattern)
+    file_lists = pull_niftis(source_directory, *args)
 
-    data0 = load_image(h_files[0]).get_data()
+    data0 = load_image(file_lists[0][0]).get_data()
     if len(data0.shape) == 3:
         x, y, z = data0.shape
         t = 1
@@ -75,14 +97,16 @@ def read_niftis(source_directory, h_pattern=None, sz_pattern=None):
     else:
         raise ValueError("Cannot parse data with dimensions %r" % data0.shape)
 
-    dt = (len(h_files) + len(sz_files)) * t
+    dt = (sum([len(fl) for fl in file_lists])) * t
     data = np.zeros((dt, x, y, z))
 
-    labels = [0] * (len(h_files) * t) + [1] * (len(sz_files) * t)
-    assert len([i for i in labels if i == 0]) == len(h_files) * t
-    assert len([i for i in labels if i == 1]) == len(sz_files) * t
+    labels = [[i] * (len(fl) * t) for i, fl in enumerate(file_lists)]
+    labels = [item for sublist in labels for item in sublist]
 
-    for i, f in enumerate(h_files + sz_files):
+    for i, fl in enumerate(file_lists):
+        assert len([j for j in labels if j == i]) == len(fl) * t
+
+    for i, f in enumerate([item for sublist in file_lists for item in sublist]):
         logger.info("Loading subject from file: %s%s" % (f, '' * 30))
         
         nifti = load_image(f)
@@ -189,14 +213,64 @@ def save_mask(data, out_dir):
     np.save(mask_path, mask)
     return mask
 
-def main(source_directory, out_dir, h_pattern=None, sz_pattern=None, args):
-    data, labels = read_niftis(source_directory,
-                               h_pattern=h_pattern,
-                               sz_pattern=sz_pattern)
+def load_simTB_data(source_directory):
+    """
+    Load simTB data along with simulation info.
+    """
+    nifti_files = natural_sort(glob(path.join(source_directory, "*_DATA.nii")))
+    sim_files = natural_sort(glob(path.join(source_directory, "*_SIM.mat")))
+    if len(nifti_files) != len(sim_files):
+        raise ValueError("Different number of DATA and SIM files found int %s" % source_directory)
+    assert len(nifti_files) > 0
+
+    param_files = glob(path.join(source_directory, "*PARAMS.mat"))
+    if len(param_files) != 1:
+        raise ValueError("Exactly one param file needed, found %d in %s"
+                         % (len(param_files), source_directory))
+    params = tuple(io.loadmat(param_files[0])["sP"][0][0])
+
+    sim_dict = {}
+    for i, (nifti_file, sim_file) in enumerate(zip(nifti_files, sim_files)):
+        assert "%03d" % (i + 1) in nifti_file
+        assert "%03d" % (i + 1) in sim_file
+        sims = io.loadmat(sim_file)
+        tcs = sims["TC"].T
+        sms = sims["SM"]
+        sim_dict[i] = {"SM": sms, "TC": tcs}
+    sim_dict["params"] = params
+
+    data, labels = read_niftis(source_directory, nifti_files)
+    return data, labels, sim_dict
+
+def is_simTBdir(source_directory):
+    """
+    Returns True is source_directory fits the criteria of being a simTB source directory.
+    """
+    nifti_files = natural_sort(glob(path.join(source_directory, "*_DATA.nii")))
+    sim_files = natural_sort(glob(path.join(source_directory, "*_SIM.mat")))
+
+    if (len(nifti_files) == len(sim_files)) and len(nifti_files) > 0:
+        logger.info("simTB directory detected")
+        return True
+    return False
+
+def main(source_directory, out_dir, args):
+    if is_simTBdir(source_directory):
+        data, labels, sim_dict = load_simTB_data(source_directory)
+    else:
+        if args.h_pattern is not None or args.sz_pattern is not None:
+            read_args = [patt for patt in (args.h_pattern, args.sz_pattern) if patt is not None]
+        else:
+            read_args = []
+        data, labels = read_niftis(source_directory, *read_args)
+        sim_dict = None
+
     mask = save_mask(data, out_dir)
     if args.verbose:
         test_distribution(data, mask)
     split_save_data(data, labels, .80, out_dir)
+    if sim_dict is not None:
+        pickle.dump(sim_dict, open(path.join(out_dir, "sim_dict.pkl"), "wb"))
 
 def make_argument_parser():
     """
@@ -206,10 +280,9 @@ def make_argument_parser():
 
     parser = argparse.ArgumentParser()
  
-
     parser.add_argument("-v", "--verbose", action="store_true", help="Show more verbosity!")
-    parser.add_argument("--h", default="H*", help="healthy subject file pattern.")
-    parser.add_argument("--sz", default="S*", help="schizophrenia subject file pattern")
+    parser.add_argument("--h_pattern", default=None, help="healthy subject file pattern.")
+    parser.add_argument("--sz_pattern", default=None, help="schizophrenia subject file pattern")
     parser.add_argument("source_directory", help="source directory for all subjects.")
     parser.add_argument("out", help="output directory under ${PYLEARN2_NI_PATH}")
     return parser
@@ -227,4 +300,4 @@ if __name__ == "__main__":
     out_dir = serial.preprocess("${PYLEARN2_NI_PATH}" + args.out)
     assert path.isdir(out_dir), "No output directory found (%s), you must make it" % out_dir
     
-    main(args.source_directory, out_dir, h_pattern=args.h, sz_pattern=args.sz, args)
+    main(args.source_directory, out_dir, args)
