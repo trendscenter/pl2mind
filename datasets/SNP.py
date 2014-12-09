@@ -63,7 +63,7 @@ class MultiChromosome(Dataset):
     Class to read multiple chromosome data.
     """
     _default_seed = (18, 4, 646)
-    def __init__(self, which_set,
+    def __init__(self,
                  chromosomes="ALL",
                  dataset_name="snp",
                  read_only=False, balance_classes=False,
@@ -73,18 +73,9 @@ class MultiChromosome(Dataset):
         assert int(chromosomes) or chromosomes == "ALL",\
             "Can only set chromosomes to be an integer or ALL"
 
-        if which_set not in ['train', 'valid', 'test']:
-            raise ValueError(
-                'Unrecognized which_set value "%s".' % (which_set,) +
-                '". Valid values are ["train", "test", "valid"].')
-
         p = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
-        if which_set in ["train", "valid"]:
-            data_files = glob(path.join(p, "gen.chr*.npy"))
-            label_file = path.join(p, "gen_labels.npy")
-        else:
-            data_files = glob(path.join(p, "real.chr*.npy"))
-            label_file = path.join(p, "real_labels.npy")
+        data_files = glob(path.join(p, "chr*.npy"))
+        label_file = path.join(p, "labels.npy")
 
         get_int = lambda y: int(''.join(x for x in y if x.isdigit()))
         data_files.sort(key=get_int)
@@ -131,7 +122,7 @@ class MultiChromosome(Dataset):
             sizes = [h5file.getNode("/", "Sizes")[c] for c in range(chromosomes)]
 
         else:
-            print "Format is on-memory for %s" % which_set
+            print "Format is on-memory for %s" % dataset_name
             sizes = []
             for c in range(0, chromosomes):
                 X = np.load(data_files[c])[start:stop, :]
@@ -148,7 +139,7 @@ class MultiChromosome(Dataset):
                 self.Xs = self.Xs + (X / 2.0,)
                 sizes.append(X.shape[1])
 
-        print "%s samples are %d" % (which_set, self.y.shape[0])
+        print "%s samples are %d" % (dataset_name, self.y.shape[0])
 
         space = tuple(VectorSpace(dim=size) for size in sizes)
         source = tuple("chromosomes_%d" % (c + 1) for c in range(chromosomes))

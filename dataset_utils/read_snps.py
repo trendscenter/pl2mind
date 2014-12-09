@@ -148,10 +148,10 @@ def parse_gen_line(line):
         elems = line.translate(None, '\n').split(" ")
         assert (len(elems) - 5) % 3 == 0, "Incorrect line length (%d)." % len(elems)
         assert "snp" in elems[0], "First element not snp number."
-        SNP_name, location, minor_allele, major_allele = elems[1:5]
-        assert minor_allele in "TCAG", "Minor allele not in TCAG"
-        assert major_allele in "TCAG", "Major allele not in TCAG"
-        assert minor_allele != major_allele, "Minor and major allele are equal."
+        SNP_name, location, allele_1, allele_2 = elems[1:5]
+        assert allele_1 in "TCAG", "Allele_1 not in TCAG"
+        assert allele_2 in "TCAG", "Allele_2 not in TCAG"
+        assert allele_1 != allele_2, "Alleles are equal."
         location = int(location)
 
         values = np.zeros((len(elems) - 5) // 3, dtype=np.int8)
@@ -164,7 +164,7 @@ def parse_gen_line(line):
         raise ValueError("Could not parse gen line \"%s\"(%s)" % (line, e))
 
     return (SNP_name, {"location": location, "values": values,
-                      "minor_allele": minor_allele, "major_allele": major_allele})
+                      "allele_1": allele_1, "allele_2": allele_2})
 
 def parse_labels_file(label_file):
     """
@@ -183,6 +183,7 @@ def parse_labels_file(label_file):
         The labels from the file.
     """
     label_file = path.abspath(label_file)
+    logger.info("Parsing label file %s" % label_file)
     def read_line(line):
         elems = line.translate(None, "\n").split(" ")
         try:
@@ -194,6 +195,8 @@ def parse_labels_file(label_file):
                 labels.append((elems[i] + 1) % 2)
         except AssertionError:
             raise ValueError("Could not parse label line \"%s\"(%s)" % (line, e))
+        except ValueError:
+            raise ValueError("Error with line %s, maybe there's an extra newline?" % line)
         return labels
 
     with open(label_file, "r") as f:
@@ -319,7 +322,7 @@ def parse_chr_directory(directory):
         if ext == "gen":
             if "cases" in elem:
                 ext = "cases"
-            elif "control" in elem:
+            elif "controls" in elem:
                 ext = "controls"
             else:
                 raise ValueError("Cannot parse gen file %s" % elem)
@@ -371,7 +374,7 @@ def parse_dataset_directory(directory, chromosomes=22):
     logger.info("Directory dictionary: %r" % dir_dict)
     return dir_dict
 
-def read_dataset_directory(directory, chromosomes=22):
+def read_dataset_directory(directory, chromosomes=22, reference_directory=None):
     """
     Reads a SNP dataset directory with multiple chromosomes.
     Note: Directory must contrain subdirectories with names "chr%d" or chr%d_synthetic
@@ -383,6 +386,8 @@ def read_dataset_directory(directory, chromosomes=22):
         Directory to read dataset from.
     chromosomes: int, optional
         Number of chromosomes to process.
+    reference_directory: str, optional
+        Reference directory to align allelesa and SNPs.
 
     Returns
     -------
@@ -392,6 +397,7 @@ def read_dataset_directory(directory, chromosomes=22):
     logger.info("Reading %d chromosomes from directory %s" % (chromosomes, directory))
     dir_dict = parse_dataset_directory(directory, chromosomes=chromosomes)
     dataset_dict = {}
+
     for key in dir_dict:
         if key == "labels":
             dataset_dict["labels"] = parse_labels_file(dir_dict[key])
@@ -403,9 +409,31 @@ def read_dataset_directory(directory, chromosomes=22):
         for c in range(1, chromosomes + 1):
             assert "cases" in dataset_dict[c]
             assert "controls" in dataset_dict[c]
-            assert have_same_SNPs(dataset_dict[c]["cases"], dataset_dict[c]["controls"])
+            assert have_same_SNP_order(dataset_dict[c]["cases"], dataset_dict[c]["controls"])
+            
+    if reference_directory is not None:
+        ref_dataset_dict, _ = read_dataset_directory(reference_directory,
+                                                  chromosomes=chromosomes)
+        for key in ref_dataset_dict:
+            if key == "labels":
+                continue
+            assert key in dataset_dict
+            chr_dict = dataset_dict[key]
+            ref_chr_dict = ref_dataset_dict[key]
+            if "controls" in chr_dict:
+                continue
+            elif "tped" in chr_dict:
+                assert "tped" in ref_chr_dict
+                ext = "tped"
+            else:
+                raise ValueError()
+            data_dict = set_A_with_B(chr_dict[ext], ref_chr_dict[ext])
+            data_dict = align_A_to_B(data_dict, ref_chr_dict[ext])
+            dataset_dict[key][ext] = data_dict
+    else:
+        ref_dataset_dict = None
 
-    return dataset_dict
+    return dataset_dict, ref_dataset_dict
 
 def pull_dataset(dataset_dict, chromosomes=22):
     """
@@ -426,12 +454,13 @@ def pull_dataset(dataset_dict, chromosomes=22):
     if "labels" not in dataset_dict:
         num_cases = None
         num_controls = None
-        data = None
+        data_dict = {}
         for c in range(1, chromosomes + 1):
             try:
                 cases = dataset_dict[c]["cases"]
                 controls = dataset_dict[c]["controls"]
-                assert have_same_SNPs(cases, controls), "Cases and controls have different SNPs."
+                assert have_same_SNP_order(cases, controls),\
+                    "Cases and controls have different SNPs."
 
                 cases_data = pull_gen_data(cases)
                 controls_data = pull_gen_data(controls)
@@ -441,31 +470,27 @@ def pull_dataset(dataset_dict, chromosomes=22):
                 if num_controls is None:
                     num_controls = controls_data.shape[0]
                 assert cases_data.shape[0] == num_cases,\
-                    "Cases data has inconsistent subjects (%d vs %d)" % (cases_data.shape[0], num_cases)
+                    "Cases data has inconsistent subjects (%d vs %d)"\
+                    % (cases_data.shape[0], num_cases)
                 assert controls_data.shape[0] == num_controls,\
-                    "Control data has inconsistent subjects (%d vs %d)" % (control_data.shape[0], num_controls)
+                    "Control data has inconsistent subjects (%d vs %d)"\
+                    % (control_data.shape[0], num_controls)
                 assert cases_data.shape[1] == controls_data.shape[1],\
                     "Cases and controls have difference number of columns (%d vs %d)."\
                     % (cases_data.shape[1], controls_data.shape[1])
-                if data is None:
-                    data = np.concatenate((controls_data, cases_data), axis=0)
-                else:
-                    data = np.concatenate((data, np.concatenate(
-                                (controls_data, cases_data), axis=0)), axis=1)
+                data_dict[c] = np.concatenate((controls_data, cases_data), axis=0)
+
             except AssertionError as e:
                 raise ValueError("Pulling data from dataset chromosome %d failed (%s)" % (c, e))
         labels = [0] * num_controls + [1] * num_cases
     else:
-        data = None
+        data_dict = {}
         for c in range(1, chromosomes + 1):
-            chr_data = pull_haps_data(dataset_dict[c]["haps"])
-            if data is None:
-                data = chr_data
-            else:
-                data = np.concatenate((data, chr_data), axis=1)
+            chr_data = pull_tped_data(dataset_dict[c]["tped"])
+            data_dict[c] = chr_data
         labels = dataset_dict["labels"]
 
-    return data, labels
+    return data_dict, labels
 
 def pull_haps_data(haps_dict, reference_names=None):
     """
@@ -666,15 +691,18 @@ def A_is_compatible_reference_for_B(file_A, file_B):
     else:
         assert isinstance(file_B, dict)
         dict_B = file_B
+    if dict_A["ext"] == "gen":
+        #Gen files are never a reference.
+        return False
     SNPs_A = set(dict_A.keys())
     SNPs_B = set(dict_B.keys())
     A_not_in_B = SNPs_A.difference(SNPs_B)
     compatible = len(A_not_in_B) == 0
     return compatible
 
-def fill_A_with_B(file_A, file_B):
+def set_A_with_B(file_A, file_B):
     """
-    Fills A with missing SNPs from B.
+    Sets A with SNPs from B and fills missing SNPs from B using priors from B.
     Uses B priors to randomly set.
     Note: tped dict_A will raise a ValueError.
 
@@ -703,28 +731,65 @@ def fill_A_with_B(file_A, file_B):
     else:
         assert isinstance(file_B, dict)
         dict_B = file_B
-
-    if dict_A["ext"] == "tped":
-        raise ValueError("tped can not be filled currently.")
-
+    if dict_A["ext"] == "gen":
+        #Gen files can't be filled right now.
+        return dict_A
     SNPs_A = set([k for k in dict_A.keys() if k != "ext"])
     SNPs_B = set([k for k in dict_B.keys() if k != "ext"])
     b_not_in_a = SNPs_B.difference(SNPs_A)
+    logger.info("Filling with %d SNPs" % len(b_not_in_a))
 
-    value_shape = dict_A[list(SNPs_A)[0]]["values"].shape
+    assert dict_A["ext"] == dict_B["ext"]
+    if dict_A["ext"] in ["haps", "gen"]:
+        value_shape = dict_A[list(SNPs_A)[0]]["values"].shape
+    else:
+        value_shape = len(dict_A[list(SNPs_A)[0]]["values"])
+
+    new_dict_A = {}
+    new_dict_A["ext"] = dict_A["ext"]
+    for SNP_name in list(SNPs_A):
+        if SNP_name in SNPs_B:
+            new_dict_A[SNP_name] = dict_A[SNP_name]
+
     for SNP_name in list(b_not_in_a):
-        assert SNP_name not in dict_A
+        assert SNP_name not in new_dict_A
         B_values = dict_B[SNP_name]["values"]
-        B_priors = [(B_values == i).sum(0) * 1. / B_values.shape[0] for i in range(3)]
-        dict_A[SNP_name] = copy.copy(dict_B[SNP_name])
-        dict_A[SNP_name]["values"] = np.random.choice(range(3), size=value_shape[0],
-                                                      p = B_priors)
+        if dict_B["ext"] in ["haps", "gen"]:
+            B_priors = [(B_values == i).sum(0) * 1. / B_values.shape[0] for i in range(3)]
+        elif dict_B["ext"] == "tped":
+            minor_allele, major_allele = (dict_B[SNP_name]["minor_allele"],
+                                          dict_B[SNP_name]["major_allele"])
+            allele_pairs = [[(minor_allele, minor_allele)], 
+                            [(minor_allele, major_allele), (major_allele, minor_allele)],
+                            [(major_allele, major_allele)]]
+            B_priors = np.array([sum([1 for b in B_values if b in pairs]) * 1. / len(B_values)
+                                 for pairs in allele_pairs])
+        else:
+            raise ValueError("extension %s not supported" % B_dict["ext"])
+        assert abs(B_priors.sum() - 1) < 10e-5, B_priors.sum()
 
-    SNPs_A = set([k for k in dict_A.keys() if k != "ext"])
+        new_dict_A[SNP_name] = copy.copy(dict_B[SNP_name])
+        if new_dict_A["ext"] in ["haps", "gen"]:
+            new_dict_A[SNP_name]["values"] = np.random.choice(range(3), size=value_shape[0],
+                                                              p=B_priors)
+        elif new_dict_A["ext"] == "tped":
+            minor_allele, major_allele = (dict_B[SNP_name]["minor_allele"],
+                                          dict_B[SNP_name]["major_allele"])
+            allele_pairs = [(minor_allele, minor_allele), 
+                            (minor_allele, major_allele),
+                            (major_allele, major_allele)]
+            values = np.random.choice(range(3),
+                                      size=value_shape,
+                                      p=B_priors)
+            new_dict_A[SNP_name]["values"] = [allele_pairs[i] for i in values]
+
+    SNPs_A = set([k for k in new_dict_A.keys() if k != "ext"])
     b_not_in_a = SNPs_B.difference(SNPs_A)
+    a_not_in_b = SNPs_A.difference(SNPs_B)
     assert len(b_not_in_a) == 0
-    logger.info("Filling completed.")
-    return dict_A
+    assert len(a_not_in_b) == 0
+    logger.info("Setting completed.")
+    return new_dict_A
 
 def A_has_similar_priors_to_B(file_A, file_B):
     """
@@ -862,8 +927,11 @@ def align_A_to_B(file_A, file_B):
     else:
         assert isinstance(file_B, dict)
         dict_B = file_B
-    assert A_is_compatible_reference_for_B(dict_B, dict_A)
-    reference_names = [k for k in dict_B.keys() if k != "ext"]
+    if dict_A["ext"] == "gen":
+        #gen files can't be aligned, as they have no minor/major reference.
+        return dict_A
+    assert A_is_compatible_reference_for_B(dict_A, dict_B)
+    reference_names = [k for k in dict_A.keys() if k != "ext"]
 
     for SNP_name in reference_names:
         minor_A, major_A = [dict_A[SNP_name][m] for m in ["minor_allele", "major_allele"]]
@@ -922,8 +990,12 @@ def make_argument_parser():
     extract_parser = subparsers.add_parser("extract")
     extract_parser.set_defaults(which="extract")
     extract_parser.add_argument("directory", help="SNP dataset directory.")
+    extract_parser.add_argument("out_dir", help="Output directory for Pylearn2 data.")
     extract_parser.add_argument("-c", "--chromosomes", default=22,
                                 type=int, help="Number of chromosomes to process.")
+    extract_parser.add_argument("-u", "--use_snps", default=None,
+                                help="Reference dataset to use SNPs from.")
+    extract_parser.add_argument("-a", "--align_to", default=None)
 
     return parser
 
@@ -971,7 +1043,7 @@ if __name__ == "__main__":
         elif B_lessthan_A:
             dict_1 = align_A_to_B(dict_1, dict_2)
         else:
-            dict_1 = fill_A_with_B(dict_1, dict_2)
+            dict_1 = set_A_with_B(dict_1, dict_2)
             dict_1 = align_A_to_B(dict_1, dict_2)
 
         if A_has_similar_priors_to_B(dict_1, dict_2):
@@ -980,5 +1052,33 @@ if __name__ == "__main__":
             print "A and B do not have similar priors."
 
     elif args.which == "extract":
-        data_dict = read_dataset_directory(args.directory, chromosomes=args.chromosomes)
-        pull_dataset(data_dict, chromosomes=args.chromosomes)
+        data_dict, ref_data_dict = read_dataset_directory(args.directory,
+                                                          chromosomes=args.chromosomes,
+                                                          reference_directory=args.reference)
+
+        if ref_data_dict is not None:
+            for key in data_dict:
+                if key == "labels":
+                    continue
+                def get_ext(d):
+                    if "controls" in d:
+                        return "controls"
+                    elif "tped" in d:
+                        return "tped"
+                    else:
+                        raise ValueError(d.keys())
+                ext1 = get_ext(data_dict[key])
+                ext2 = get_ext(ref_data_dict[key])
+
+                assert A_has_similar_priors_to_B(data_dict[key][ext1],
+                                                 ref_data_dict[key][ext2])
+        data_dict, labels = pull_dataset(data_dict, chromosomes=args.chromosomes)
+        out_dir = serial.preprocess("${PYLEARN2_NI_PATH}/" + args.out_dir)
+        assert path.isdir(out_dir), out_dir
+        logger.info("Saving labels to %s" % out_dir)
+        np.save(path.join(out_dir, "labels.npy"), labels)
+        for c in data_dict:
+            logger.info("Saving chromosome %d to %s" %
+                        (c, path.join(out_dir, "chr%d.npy" % c)))
+            np.save(path.join(out_dir, "chr%d.npy" % c), data_dict[c])
+
