@@ -69,8 +69,10 @@ class MultiChromosome(Dataset):
                  read_only=False, balance_classes=False,
                  start=None, stop=None, shuffle=False,
                  add_noise=False, rng=_default_seed):
-
-        assert int(chromosomes) or chromosomes == "ALL",\
+        print "Loading %r chromosomes for %s" % (chromosomes, dataset_name)
+        if start is not None and stop is not None:
+            print "Start: %d, stop: %d" % (start, stop)
+        assert isinstance(chromosomes, int) or chromosomes == "ALL",\
             "Can only set chromosomes to be an integer or ALL"
 
         p = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
@@ -179,9 +181,9 @@ class MultiChromosome(Dataset):
         subspaces = space.components
         subsources = source
         mode = resolve_iterator_class("shuffled_sequential")
-        if rng is None:
-            rng = self.rng
-        rng = None
+
+        rng = self.rng
+#        rng = None
 #        assert rng is not None
         subset_iterator = mode(self.y.shape[0],
                                batch_size,
