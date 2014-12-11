@@ -47,6 +47,16 @@
                                 dim: *nhid,
                                 irange: *irange,
                             },
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_2_h2',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_2_h3',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
                             !obj:pylearn2.models.mlp.Linear {
                                 layer_name: 'coupling_2_out',
                                 dim: *half_nvis,
@@ -90,16 +100,6 @@
                         layers: [
                             !obj:pylearn2.models.mlp.RectifiedLinear {
                                 layer_name: 'coupling_4_h1',
-                                dim: *nhid,
-                                irange: *irange,
-                            },
-                            !obj:pylearn2.models.mlp.RectifiedLinear {
-                                layer_name: 'coupling_4_h2',
-                                dim: *nhid,
-                                irange: *irange,
-                            },
-                            !obj:pylearn2.models.mlp.RectifiedLinear {
-                                layer_name: 'coupling_4_h3',
                                 dim: *nhid,
                                 irange: *irange,
                             },

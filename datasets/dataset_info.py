@@ -17,3 +17,10 @@ aod_datasets = [
     "aod",
     "aod_healthy"
 ]
+
+"""
+SimTB datasets.
+"""
+simtb_datasets = [
+    "simtb",
+]

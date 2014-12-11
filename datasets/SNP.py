@@ -158,7 +158,7 @@ class MultiChromosome(Dataset):
         assert self.rng is not None
 
         # Defaults for iterators
-        self._iter_mode = resolve_iterator_class("sequential")
+        self._iter_mode = resolve_iterator_class("shuffled_sequential")
         self._iter_topo = False
         self._iter_targets = False
         self._iter_data_specs = self.data_specs
@@ -184,7 +184,7 @@ class MultiChromosome(Dataset):
 
         rng = self.rng
 #        rng = None
-#        assert rng is not None
+        assert rng is not None
         subset_iterator = mode(self.y.shape[0],
                                batch_size,
                                num_batches,
