@@ -66,7 +66,7 @@ def pull_niftis(source_directory, *args):
                     else:
                         file_list.append(path.join(source_directory, file_name))
                 file_lists.append(file_list)
-            elif isinance(arg, str):
+            elif isinstance(arg, str):
                 file_list = glob(path.join(source_directory, arg))
                 if len(file_list) == 0: 
                     logger.warn("Files are empty with pattern %s" % 

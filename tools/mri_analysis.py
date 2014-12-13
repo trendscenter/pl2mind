@@ -22,6 +22,7 @@ from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Transposed
 from pylearn2.neuroimaging_utils.tools import ols
 from pylearn2.neuroimaging_utils.tools import rois
 from pylearn2.neuroimaging_utils.tools import nifti_viewer
+from pylearn2.neuroimaging_utils.tools import simtb_viewer
 from pylearn2.models.dbm import DBM
 from pylearn2.models.vae import VAE
 from pylearn2.utils import serial
@@ -225,8 +226,22 @@ def get_nifti(dataset, features, out_file=None):
         nipy.save_image(nifti, out_file)
     return nifti
 
-def save_montage(nifti, nifti_file, out_file, anat_file=None, feature_dict=None,
-                 target_stat=None, target_value=None):
+def save_simtb_montage(dataset, features, out_file, feature_dict,
+                       target_stat=None, target_value=None):
+    """
+    Saves a simtb montage.
+    """
+
+    logger.info("Saving simtb montage")
+    weights_view = dataset.get_weights_view(features)
+    simtb_viewer.montage(weights_view, out_file=out_file,
+                         feature_dict=feature_dict,
+                         target_stat=target_stat,
+                         target_value=target_value)
+
+def save_nii_montage(nifti, nifti_file, out_file,
+                     anat_file=None, feature_dict=None,
+                     target_stat=None, target_value=None):
     """
     Saves a montage from a nifti file.
     This will also process an region of interest dictionary (ROIdict)
@@ -244,13 +259,17 @@ def save_montage(nifti, nifti_file, out_file, anat_file=None, feature_dict=None,
         Path to anat file. If not provided,
         ${PYLEARN2_NI_PATH}/mri_extra/ch2better_aligned2EPI.nii is used.
     """
-    logger.info("Saving montage from %s to %s." % (nifti_file, out_file))
+    logger.info("Saving montage from %s to %s."
+                % (nifti_file, out_file))
     roi_dict = rois.main(nifti_file)
     if anat_file is None:
         anat_file = serial.preprocess(
             "${PYLEARN2_NI_PATH}/mri_extra/ch2better_aligned2EPI.nii")
-    nifti_viewer.montage(nifti, anat_file, roi_dict, out_file=out_file,
-                         feature_dict=feature_dict, target_stat=target_stat,
+    nifti_viewer.montage(nifti, anat_file,
+                         roi_dict,
+                         out_file=out_file,
+                         feature_dict=feature_dict,
+                         target_stat=target_stat,
                          target_value=target_value)
 
 def load_feature_dict(feature_dict, stat, stat_name):
@@ -414,11 +433,20 @@ def main(model_path, out_path, args):
     features = get_features(model, args.zscore, transposed_features,
                             dataset, feature_dict=feature_dict)
     set_experiment_info(model, dataset, feature_dict)
-    nifti_path = path.join(out_path, prefix + ".nii")
+
     pdf_path = path.join(out_path, prefix + ".pdf")
-    nifti = get_nifti(dataset, features, out_file=nifti_path)
-    save_montage(nifti, nifti_path, pdf_path, feature_dict=feature_dict,
-                 target_stat=args.target_stat, target_value=2.)
+    if dataset.dataset_name in dataset_info.simtb_datasets:
+        save_simtb_montage(dataset, features, pdf_path,
+                           feature_dict=feature_dict,
+                           target_stat=args.target_stat,
+                           target_value=2.)
+    else:
+        nifti_path = path.join(out_path, prefix + ".nii")
+        nifti = get_nifti(dataset, features, out_file=nifti_path)
+        save_nii_montage(nifti, nifti_path,
+                         pdf_path, feature_dict=feature_dict,
+                         target_stat=args.target_stat,
+                         target_value=2.)
     logger.info("Done.")
 
 def make_argument_parser():
