@@ -1,9 +1,9 @@
 from copy import deepcopy
 import functools
 from glob import glob
+import logging
 import numpy as np
 from os import path
-#import tables
 
 from pylearn2.datasets import control
 from pylearn2.datasets import Dataset
@@ -17,12 +17,17 @@ from pylearn2.utils.iteration import FiniteDatasetIterator
 from pylearn2.utils.iteration import resolve_iterator_class
 from pylearn2.utils import safe_zip
 from pylearn2.utils import serial
+from pylearn2.utils import sharedX
 from pylearn2.utils.rng import make_np_rng
 
 from theano import config
 from theano.compat.python2x import OrderedDict
 
 from pylearn2.neuroimaging_utils.research import randomize_snps
+
+
+logging.basicConfig(format="[%(module)s:%(levelname)s]:%(message)s")
+logger = logging.getLogger(__name__)
 
 class MultimodalMLP(mlp.MLP):
     def __init__(self, dataset, layers):
@@ -37,14 +42,21 @@ class MultimodalMLP(mlp.MLP):
         return rval
 
 class MultiChromosomeLayer(mlp.CompositeLayer):
-    def __init__(self, num_layers, layer_to_copy):
+    def __init__(self, num_layers, layer_to_copy, layer_dims=None):
         layer_name = 'multi_chromosome_layer'
 
         layers = []
         inputs_to_layers = {}
+        if layer_dims:
+            assert len(layer_dims) == num_layers
         for n in range(num_layers):
             layer = deepcopy(layer_to_copy)
             layer.layer_name += "_%d" % n
+            if layer_dims:
+                layer.dim = layer_dims[n]
+                logger.warning("Init bias in copying ignored.")
+                layer.b = sharedX(np.zeros((layer.dim,)), 
+                             name=(layer.layer_name + '_b'))
             layers.append(layer)
             inputs_to_layers[n] = [n]
 
@@ -68,7 +80,7 @@ class MultiChromosome(Dataset):
                  dataset_name="snp",
                  read_only=False, balance_classes=False,
                  start=None, stop=None, shuffle=False,
-                 add_noise=False, rng=_default_seed):
+                 add_noise=False, rng=_default_seed, flip_labels=False):
         print "Loading %r chromosomes for %s" % (chromosomes, dataset_name)
         if start is not None and stop is not None:
             print "Start: %d, stop: %d" % (start, stop)
@@ -86,6 +98,8 @@ class MultiChromosome(Dataset):
             chromosomes = len(data_files)
 
         self.y = np.atleast_2d(np.load(label_file)).T[start:stop]
+        if flip_labels:
+            self.y = (self.y + 1) % 2
         self.Xs = ()
         space = ()
         source = ()

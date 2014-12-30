@@ -170,7 +170,7 @@ def parse_labels_file(label_file):
     """
     Parses a labels file.
     Lables are single line with pairwise designations of controls vs cases. Space delimited.
-    e.g., 0 0 1 1 1 1 translates to [1, 0, 0], where 0 is for cases and 1 is for controls.
+    e.g., 0 0 1 1 1 1 translates to [1, 0, 0], where 0 is for conrols and 1 is for cases.
 
     Parameters
     ----------
@@ -191,8 +191,8 @@ def parse_labels_file(label_file):
             assert len(elems) % 2 == 0, "Label line must have even elements."
             labels = []
             for i in range(0, len(elems), 2):
-                assert elems[i] == elems[i+1], "Can only read 0 0 (healthies) or 1 1 (schizophrenia)."
-                labels.append((elems[i] + 1) % 2)
+                assert elems[i] == elems[i+1], "Can only read 1 1 (healthies) or 0 0 (schizophrenia)."
+                labels.append(elems[i])
         except AssertionError:
             raise ValueError("Could not parse label line \"%s\"(%s)" % (line, e))
         except ValueError:
@@ -232,7 +232,6 @@ def parse_file(file_name):
     if ext not in exts:
         raise NotImplementedError("Extension not supported (%s), must be in %s" % (ext, exts))
 
-    ignore = ["rsdummy"]
 
     method_dict = {"bim": parse_bim_line,
                    "haps": parse_haps_line,
@@ -245,8 +244,6 @@ def parse_file(file_name):
     with open(file_name, "r") as f:
         for line in f.readlines():
             entry = method_dict[ext](line)
-            if entry[0] in ignore:
-                continue
             if entry[0] in parse_dict:
                 raise ValueError("Found a duplicate SNP(%s) in .%s file." % (entry[0], ext))
             parse_dict[entry[0]] = entry[1]
@@ -313,9 +310,9 @@ def parse_chr_directory(directory):
         Dictionary of extension keys and file path values.
     """
     # We need to ignore these files for now.
-    ignore_string = "HAPGENinput"
+    ignore_strings = ["HAPGENinput", "input"]
     files = [f for f in listdir(directory) if path.isfile(path.join(directory,f))]
-    files = [f for f in files if ignore_string not in f]
+    files = [f for f in files if not any([ignore_string in f for ignore_string in ignore_strings])]
     file_dict = {}
 
     def insert(ext, elem):
@@ -350,7 +347,7 @@ def parse_chr_directory(directory):
         # Only cases and controls needed for gen files.
         file_dict = dict((f, file_dict[f]) for f in ["cases", "controls"])
     else:
-        for key in ["bim", "haps", "ped"]:
+        for key in ["bim", "haps"]:
             if key not in file_dict:
                 raise ValueError("%s not found in %s" % (key, directory))
         if "tped" not in file_dict:
@@ -420,6 +417,8 @@ def read_dataset_directory(directory, chromosomes=22,
         for key in snps_ref_dataset_dict:
             if key == "labels":
                 continue
+
+            assert isinstance(key, int)
             assert key in dataset_dict
             chr_dict = dataset_dict[key]
             def get_dict(d):
@@ -455,6 +454,8 @@ def read_dataset_directory(directory, chromosomes=22,
             elif "tped" in chr_dict:
                 assert "tped" in align_ref_chr_dict
                 ext = "tped"
+            elif "haps" in chr_dict:
+                continue
             else:
                 raise ValueError()
             data_dict = align_A_to_B(chr_dict[ext], align_ref_chr_dict[ext])
@@ -515,7 +516,10 @@ def pull_dataset(dataset_dict, chromosomes=22, shuffle=True):
     else:
         data_dict = {}
         for c in range(1, chromosomes + 1):
-            chr_data = pull_tped_data(dataset_dict[c]["tped"])
+            if "tped" in dataset_dict[c]:
+                chr_data = pull_tped_data(dataset_dict[c]["tped"])
+            else:
+                chr_data = pull_haps_data(dataset_dict[c]["haps"])
             data_dict[c] = chr_data
         labels = dataset_dict["labels"]
 
@@ -551,6 +555,7 @@ def pull_haps_data(haps_dict, reference_names=None):
         reference_names = [k for k in haps_dict.keys() if k != "ext"]
 
     data = np.zeros((samples, len(reference_names)), dtype=np.int8)
+    reference_names = sorted(list(reference_names))
     for i, SNP_name in enumerate(reference_names):
         assert SNP_name != "ext"
         data[:, i] = haps_dict[SNP_name]["values"]
@@ -578,6 +583,7 @@ def pull_tped_data(tped_dict, reference_names=None):
     if reference_names == None:
         reference_names = [k for k in tped_dict.keys() if k != "ext"]
 
+    reference_names = sorted(list(reference_names))
     data = np.zeros((samples, len(reference_names)), dtype=np.int8)
     for i, SNP_name in enumerate(reference_names):
         assert SNP_name != "ext"
@@ -611,6 +617,7 @@ def pull_gen_data(gen_dict, reference_names=None):
         reference_names = [k for k in gen_dict.keys() if k != "ext"]
     samples = len(gen_dict[reference_names[0]]["values"])
 
+    reference_names = sorted(list(reference_names))
     data = np.zeros((samples, len(reference_names)), dtype=np.int8)
     for i, SNP_name in enumerate(reference_names):
         assert SNP_name != "ext"
@@ -755,7 +762,7 @@ def set_A_with_B(file_A, file_B, nofill=False):
     dict_A, dict
         Dicitonary of A with filled SNPs.
     """
-    logger.info("Filling A with SNPs from B.")
+    logger.info("Setting A with SNPs from B.")
     if isinstance(file_A, str):
         file_A = path.abspath(file_A)
         dict_A = parse_file(file_A)
@@ -1035,6 +1042,11 @@ def make_argument_parser():
 
     return parser
 
+def save_snp_names(out_file, snp_list):
+    with open(out_file, "w") as f:
+        for snp in snp_list:
+            f.write("%s\n" % snp)
+
 if __name__ == "__main__":
     parser = make_argument_parser()
     args = parser.parse_args()
@@ -1115,29 +1127,37 @@ if __name__ == "__main__":
                     assert have_same_SNP_order(data_chr_dict, snp_ref_chr_dict)
                     logger.info("Data now the same set of SNPs as reference")
             
+        def get_ext(d):
+            if "controls" in d:
+                return "controls"
+            elif "tped" in d:
+                return "tped"
+            elif "haps" in d:
+                return "haps"
+            else:
+                raise ValueError(d.keys())
+
         if ref_data_dict is not None:
             for key in data_dict:
                 if key == "labels":
                     continue
-                def get_ext(d):
-                    if "controls" in d:
-                        return "controls"
-                    elif "tped" in d:
-                        return "tped"
-                    else:
-                        raise ValueError(d.keys())
                 ext1 = get_ext(data_dict[key])
                 ext2 = get_ext(ref_data_dict[key])
 
                 assert A_has_similar_priors_to_B(data_dict[key][ext1],
                                                  ref_data_dict[key][ext2])
-        data_dict, labels = pull_dataset(data_dict, chromosomes=args.chromosomes)
+        data, labels = pull_dataset(data_dict, chromosomes=args.chromosomes)
         out_dir = serial.preprocess("${PYLEARN2_NI_PATH}/" + args.out_dir)
         assert path.isdir(out_dir), out_dir
         logger.info("Saving labels to %s" % out_dir)
         np.save(path.join(out_dir, "labels.npy"), labels)
         for c in data_dict:
+            if c == "labels":
+                continue
             logger.info("Saving chromosome %d to %s" %
                         (c, path.join(out_dir, "chr%d.npy" % c)))
-            np.save(path.join(out_dir, "chr%d.npy" % c), data_dict[c])
-
+            np.save(path.join(out_dir, "chr%d.npy" % c), data[c])
+            
+            save_snp_names(path.join(out_dir, "chr%d.snps" % c),
+                           [k for k in data_dict[c][get_ext(data_dict[c])] 
+                            if k != "ext"])

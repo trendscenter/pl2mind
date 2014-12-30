@@ -396,7 +396,7 @@ def resolve_dataset(model):
 
 def main(model_path, out_path, args):
     """
-    Main function of moduel.
+    Main function of module.
     This function controls the high end analysis functions.
 
     Parameters
@@ -433,6 +433,7 @@ def main(model_path, out_path, args):
     features = get_features(model, args.zscore, transposed_features,
                             dataset, feature_dict=feature_dict)
     set_experiment_info(model, dataset, feature_dict)
+    
 
     pdf_path = path.join(out_path, prefix + ".pdf")
     if dataset.dataset_name in dataset_info.simtb_datasets:

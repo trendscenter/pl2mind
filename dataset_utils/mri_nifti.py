@@ -35,6 +35,11 @@ def natural_sort(l):
     alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
     return sorted(l, key = alphanum_key)
 
+def save_variance_map(dataset, save_path):
+    logger.info("Saving variance file")
+    variance_map = dataset.X.std(axis=0)
+    np.save(save_path, variance_map)
+
 def pull_niftis(source_directory, *args):
     """
     Pull healthy and schizophrenia nitfi files from a source_directory. Uses glob to get multiple files.
