@@ -67,8 +67,8 @@ def load_experiments(args):
     variance_map_file = path.join(data_path, "variance_map.npy")
     mri_nifti.save_variance_map(mri, variance_map_file)
 
-    for nhid1 in hidden_generator(2):
-        for nhid2 in hidden_generator(3):
+    for nhid1 in hidden_generator(4):
+        for nhid2 in hidden_generator(4):
             for lr in learning_rate_generator(5, 0.1, 0.00001):
                 logger.info("Adding MLP experiment with %d units on first hidden layer "
                             "and %d units on second and learning rate of %f"
