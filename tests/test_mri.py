@@ -72,7 +72,7 @@ class TestMRI:
         samples = topo_view.shape[0]
         assert topo_view.shape == (samples, rows, columns, depth)
         data = np.load(self.data_path)
-        assert topo_view.shape == data.shape
+        assert topo_view.shape[1:] == data.shape[1:], "topo view and data shape mismatch %r vs %r" % (topo_view.shape, data.shape)
 
         for i in range(rows):
             for j in range(columns):

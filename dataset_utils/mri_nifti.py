@@ -86,12 +86,20 @@ def pull_niftis(source_directory, *args):
 
     return file_lists
 
-def read_niftis(source_directory, *args):
+def read_niftis(file_lists):
     """
     Read niftis.
-    """
 
-    file_lists = pull_niftis(source_directory, *args)
+    Parameters
+    ----------
+    file_lists: list of list of paths.
+        Each list of file paths is a unique class.
+    
+    Returns
+    -------
+    data, labels: tuple of array-like and list
+        The data and corresponding labels
+    """
 
     data0 = load_image(file_lists[0][0]).get_data()
     if len(data0.shape) == 3:
@@ -185,10 +193,13 @@ def split_save_data(data, labels, train_percentage, out_dir):
 
     np.save(path.join(out_dir, "train_idx.npy"), train_idx)
     np.save(path.join(out_dir, "test_idx.npy"), test_idx)
+
     np.save(path.join(out_dir, "full_unshuffled.npy"), data)
     np.save(path.join(out_dir, "full_labels_unshuffled.npy"), labels)
+
     np.save(path.join(out_dir, "train.npy"), data[train_idx])
     np.save(path.join(out_dir, "train_labels.npy"), [labels[i] for i in train_idx])
+
     np.save(path.join(out_dir, "test.npy"), data[test_idx])
     np.save(path.join(out_dir, "test_labels.npy"), [labels[i] for i in test_idx])
 
@@ -259,7 +270,7 @@ def is_simTBdir(source_directory):
         return True
     return False
 
-def main(source_directory, out_dir, args):
+def from_dir(source_directory, out_dir, args):
     if is_simTBdir(source_directory):
         data, labels, sim_dict = load_simTB_data(source_directory)
     else:
@@ -267,7 +278,8 @@ def main(source_directory, out_dir, args):
             read_args = [patt for patt in (args.h_pattern, args.sz_pattern) if patt is not None]
         else:
             read_args = []
-        data, labels = read_niftis(source_directory, *read_args)
+        file_lists = pull_niftis(source_directory, *read_args)
+        data, labels = read_niftis(file_lists)
         sim_dict = None
 
     mask = save_mask(data, out_dir)
@@ -276,6 +288,32 @@ def main(source_directory, out_dir, args):
     split_save_data(data, labels, .80, out_dir)
     if sim_dict is not None:
         pickle.dump(sim_dict, open(path.join(out_dir, "sim_dict.pkl"), "wb"))
+
+def read_file_list(file_path):
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+        parsed_lines = [l.translate(None, "\n").split("\t") for l in lines]
+        parsed_lines = [(i, int(j)) for i, j in parsed_lines]
+        for i, l in enumerate(parsed_lines):
+            try:
+                assert len(l) == 2, "Wrong length (%d instead of %s)" %(len(l), 2)
+                assert isinstance(l[1], int), "Second column not an int"
+            except AssertionError as e:
+                raise ValueError("Connot read %s parsed as %r (%s)"
+                                 % (lines[i], parsed_lines[i], e))
+    labels = set([l[1] for l in parsed_lines])
+    file_lists = []
+    for label in labels:
+        file_lists.append([i for i, l in parsed_lines if l == label])
+    return file_lists
+
+def from_file(file_path, out_dir, args):
+    file_lists = read_file_list(file_path)
+    data, labels = read_niftis(file_lists)
+    mask = save_mask(data, out_dir)
+    if args.verbose:
+        test_distribution(data, mask)
+    split_save_data(data, labels, .80, out_dir)
 
 def make_argument_parser():
     """
@@ -286,10 +324,28 @@ def make_argument_parser():
     parser = argparse.ArgumentParser()
  
     parser.add_argument("-v", "--verbose", action="store_true", help="Show more verbosity!")
-    parser.add_argument("--h_pattern", default=None, help="healthy subject file pattern.")
-    parser.add_argument("--sz_pattern", default=None, help="schizophrenia subject file pattern")
-    parser.add_argument("source_directory", help="source directory for all subjects.")
     parser.add_argument("out", help="output directory under ${PYLEARN2_NI_PATH}")
+    
+    subparsers = parser.add_subparsers(help="sub-command help")
+    subparsers.required = True
+
+    from_directory_parser = subparsers.add_parser("from_directory")
+    from_directory_parser.set_defaults(which="from_directory")
+    from_directory_parser.add_argument("--h_pattern",
+                                       default=None,
+                                       help="healthy subject file pattern.")
+    from_directory_parser.add_argument("--sz_pattern",
+                                       default=None,
+                                       help="schizophrenia subject file pattern")
+    from_directory_parser.add_argument("source_directory",
+                                       help="source directory for all subjects.")
+
+    from_file_parser = subparsers.add_parser("from_file")
+    from_file_parser.set_defaults(which="from_file")
+    from_file_parser.add_argument("file",
+                                  help=("File from which to load files and labels. "
+                                        "Must be tab delimited (path label)"))
+
     return parser
 
 if __name__ == "__main__":
@@ -301,8 +357,17 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    assert path.isdir(args.source_directory), "Source directory not found: %s" % source_directory
     out_dir = serial.preprocess("${PYLEARN2_NI_PATH}" + args.out)
-    assert path.isdir(out_dir), "No output directory found (%s), you must make it" % out_dir
-    
-    main(args.source_directory, out_dir, args)
+    assert path.isdir(out_dir), ("No output directory found (%s), you must make it"
+                                 % out_dir)
+
+    if args.which == "from_directory":
+        assert path.isdir(args.source_directory), ("Source directory not found: %s"
+                                                   % source_directory)
+        from_dir(args.source_directory, out_dir, args)
+
+    elif args.which == "from_file":
+        if not path.isfile(args.file):
+            raise IOError("%s not found" % args.file)
+        from_file(args.file, out_dir, args)
+        

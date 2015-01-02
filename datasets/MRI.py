@@ -438,8 +438,9 @@ class MRI_Standard(MRI):
                 assert (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 0
             
         X = self.set_mri_topological_view(topo_view, mask=mask)
-        logger.info("Masked shape is %r" % (X.shape,))
-        assert X.shape[1] == (mask == 1).sum()
+        if mask is not None:
+            logger.info("Masked shape is %r" % (X.shape,))
+            assert X.shape[1] == (mask == 1).sum()
         if even_input:
             assert X.shape[1] % 2 == 0
 
