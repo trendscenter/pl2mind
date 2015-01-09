@@ -1,0 +1,66 @@
+# Example script showcasing how to use the non-linear ICA framework with MRI.
+!obj:pylearn2.train.Train {
+    dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.%(data_class)s {
+        which_set: "train",
+        center: &center False,
+        even_input: &ei True,
+        unit_normalize: &un True,
+        apply_mask: &app_mask True,
+        dataset_name: &ds_name %(dataset_name)s
+    },
+    model: !obj:nice.pylearn2.models.nice.NICE {
+        # Input dimensions (x's dimensionality)
+        nvis: &nvis %(nvis)i,
+        corruptor: !obj:pylearn2.neuroimaging_utils.datasets.MRI.GaussianMRICorruptor {
+            stdev: %(gaussian_noise)f,
+            variance_map: !pkl: "%(variance_map_file)s"
+        },
+        # The encoder model is a MLP
+        encoder: %(encoder)s,
+        # The prior model is picked
+        prior: %(prior)s,
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: %(batch_size)d,
+        learning_rate: %(learning_rate)f,
+        learning_rule: !obj:nice.pylearn2.training_algorithms.learning_rule.RMSPropMomentum {
+            init_momentum: %(init_momentum)f,
+        },
+        monitoring_dataset: {
+            'train' : *data,
+            'valid': !obj:pylearn2.neuroimaging_utils.datasets.MRI.%(data_class)s {
+                which_set: "test",
+                center: *center,
+                even_input: *ei,
+                unit_normalize: *un,
+                apply_mask: *app_mask,
+                dataset_name: *ds_name
+                },
+        },
+        cost: !obj:pylearn2.costs.cost.SumOfCosts { costs: [
+            !obj:nice.pylearn2.costs.log_likelihood.NegativeLogLikelihood {},
+            %(weight_decay)s
+            ]
+        },
+        termination_criterion: %(termination_criterion)s,
+        update_callbacks: [
+            !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+                decay_factor: %(decay_factor)f,
+                min_lr:       %(min_lr)f,
+            },
+        ],
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+           channel_name: 'valid_objective',
+           save_path: "%(save_path)s_best.pkl",
+        },
+        !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+            final_momentum: %(final_momentum)f,
+            start: 5,
+            saturate: 6,
+        },
+    ],
+    save_path: "%(save_path)s.pkl",
+    save_freq: 10,
+}
