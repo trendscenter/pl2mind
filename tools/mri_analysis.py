@@ -64,7 +64,7 @@ def get_activations(model, dataset):
     if isinstance(model, NICE):
         if isinstance(dataset, MRI_Transposed):
             S = model.encoder.layers[-1].D.get_value()
-            sigma = 1. / S
+            sigma = np.exp(-S)
             num_features = model.nvis
             y = np.zeros((1, num_features))
             Y = sharedX(y)
@@ -315,7 +315,7 @@ def get_features(model, zscore=True, transposed_features=False,
     elif isinstance(model, NICE):
         logger.info("NICE layers: %r" % model.encoder.layers)
         S = model.encoder.layers[-1].D.get_value()
-        sigma = 1. / S
+        sigma = np.exp(-S)
         idx = np.argsort(S).tolist()
         num_features = len(idx)
         idx = idx[:max_features]
