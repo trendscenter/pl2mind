@@ -17,6 +17,7 @@ import numpy as np
 from os import listdir
 from os import path
 import random
+import re
 from pylearn2.utils import serial
 import sys
 import warnings
@@ -89,7 +90,22 @@ def parse_haps_line(line):
         raise ValueError("Could not parse haps line \"%s\"" % line)
 
     return (SNP_name, {"location": location, "chromosome": chromosome,
-                       "minor": minor, "major": major, "values": values})
+                       "minor": minor, "major": major, "values": values,
+                       "raw_values": elems[5:]})
+
+def write_haps_line(SNP_name, entry, omit_info=False, info_only=False):
+    if omit_info:
+        assert not info_only
+
+    if not omit_info:
+        line = "%(chromosome)d" % entry
+        line += " %s " % SNP_name
+        line += "%(location)d %(minor)s %(major)s " % entry
+    else:
+        line = ""
+    if not info_only:
+        line += " ".join(entry["raw_values"])
+    return line
 
 def parse_tped_line(line):
     """
@@ -261,19 +277,25 @@ def read_chr_directory(directory):
 
     Returns
     -------
-    snp_dict: dict with extension keys and dictionary values. Dictionaries depend on the extension.
+    snp_dict: dict with extension keys and dictionary values.
+        Dictionaries depend on the extension.
     """
+
     directory = path.abspath(directory)
     file_dict = parse_chr_directory(directory)
-    snp_dict = {}
+    snp_dict = {"directory": directory}
     for ext in file_dict:
         file_name = path.join(directory, file_dict[ext])
         parse_dict = parse_file(file_name)
         snp_dict[ext] = parse_dict
 
     if "tped" in snp_dict:
-        snp_dict["haps"] = dict((k, snp_dict["haps"][k]) for k in snp_dict["haps"].keys() if k in snp_dict["tped"].keys())
-        snp_dict["bim"] = dict((k, snp_dict["bim"][k]) for k in snp_dict["bim"].keys() if k in snp_dict["tped"].keys())
+        snp_dict["haps"] = dict((k, snp_dict["haps"][k])
+                                for k in snp_dict["haps"].keys()
+                                if k in snp_dict["tped"].keys())
+        snp_dict["bim"] = dict((k, snp_dict["bim"][k])
+                               for k in snp_dict["bim"].keys()
+                               if k in snp_dict["tped"].keys())
 
     if "haps" in snp_dict:
         assert "bim" in snp_dict
@@ -281,7 +303,8 @@ def read_chr_directory(directory):
             if key == "ext": continue
 
             minor, major = [(snp_dict["haps"][key])[m] for m in ["minor", "major"]]
-            minor_allele, major_allele = [(snp_dict["bim"][key])[m] for m in ["allele_1", "allele_2"]]
+            minor_allele, major_allele = [(snp_dict["bim"][key])[m]
+                                          for m in ["allele_1", "allele_2"]]
 
             if (minor, major) == (2, 1):
                 minor_allele, major_allele = major_allele, minor_allele
@@ -882,22 +905,28 @@ def A_has_similar_priors_to_B(file_A, file_B):
     assert np.allclose(priors_B[0] + priors_B[1] + priors_B[2], np.zeros(priors_B[0].shape) + 1)
     similar = True
     for i, (prior_A, prior_B) in enumerate(zip(priors_A, priors_B)):
-        percent_off = (len(np.where(prior_A - prior_B > 0.15)[0].tolist()) * 1. / prior_A.shape[0])
-        percent_reversed = (len(np.where(np.logical_and(prior_A - priors_B[-(i - 1) + 1] <= 0.15, 
-                                                        prior_A - prior_B > 0.15))[0].tolist()) * 1. /prior_A.shape[0])
+        percent_off = (
+            len(np.where(prior_A - prior_B > 0.15)[0].tolist()) * 1. / prior_A.shape[0])
+        percent_reversed = (len(np.where(
+                    np.logical_and(
+                        prior_A - priors_B[-(i - 1) + 1] <= 0.15, 
+                        prior_A - prior_B > 0.15))[0].tolist()) * 1. /prior_A.shape[0])
         if percent_off > .05:
-            logger.warn("Priors P(%d) not close: %.2f%% off by 15%% or more" % (i, percent_off * 100))
-            logger.warn("Priors P(%d) reversed for %.2f%% of SNPs" % (i, percent_reversed * 100))
+            logger.warn("Priors P(%d) not close: %.2f%% off by 15%% or more"
+                        % (i, percent_off * 100))
+            logger.warn("Priors P(%d) reversed for %.2f%% of SNPs"
+                        % (i, percent_reversed * 100))
             similar = False
         else:
-            logger.info("Priors P(%s) close: %.2f%% off by 15%% or more" % (i, percent_off * 100))
+            logger.info("Priors P(%s) close: %.2f%% off by 15%% or more"
+                        % (i, percent_off * 100))
     return similar
 
 def A_is_aligned_to_B(file_A, file_B):
     """
     Checks if file_A and file_B are aligned.
-    Files or dictionaries are aligned if one is a compatible reference for the other and the major / minor
-    specifications are the same.
+    Files or dictionaries are aligned if one is a compatible
+    reference for the other and the major / minor specifications are the same.
 
     Parameters
     ----------
@@ -1040,12 +1069,78 @@ def make_argument_parser():
     extract_parser.add_argument("-a", "--align_to", default=None)
     extract_parser.add_argument("--nofill", action="store_true")
 
+    separate_parser = subparsers.add_parser("separate", help="Separate haps for GWA sim")
+    separate_parser.set_defaults(which="separate")
+    separate_parser.add_argument("chr_dir")
+    separate_parser.add_argument("labels")
+    separate_parser.add_argument("-s", "--separate_info", action="store_true")
+    separate_parser.add_argument("-t", "--transposed", action="store_true")
+
     return parser
 
 def save_snp_names(out_file, snp_list):
     with open(out_file, "w") as f:
         for snp in snp_list:
             f.write("%s\n" % snp)
+
+def write_haps_file(haps, out_file, omit_info=False, info_only=False, transposed=False):
+    with open(out_file, "w") as f:
+        lines = []
+        for SNP_name in sorted(haps.keys()):
+            if SNP_name == "ext":
+                continue
+            lines.append(write_haps_line(SNP_name, haps[SNP_name],
+                                         omit_info=omit_info,
+                                         info_only=info_only))
+        if transposed:
+            logger.info("Transposing file")
+            lines = [l.split(" ") for l in lines]
+            lines = map(list, zip(*lines))
+            lines = [" ".join(l) for l in lines]
+        logger.info("Writing file")
+        for line in lines:
+            f.write(line + "\n")
+
+def split_haps(chr_dict, labels, separate_info=False, transposed=False):
+    """
+    Splits haps files into 2 and saves them.
+    """
+    if not "haps" in chr_dict:
+        raise ValueError()
+    controls_idx = [i for i, j in enumerate(labels) if j == 0]
+    cases_idx = [i for i, j in enumerate(labels) if j == 1]
+
+    def split(haps, idx):
+        new_haps = copy.deepcopy(chr_dict["haps"])
+        for SNP_name in new_haps:
+            if SNP_name == "ext":
+                continue
+            new_haps[SNP_name]["values"] = [new_haps[SNP_name]["values"][i] for i in idx]
+            new_haps[SNP_name]["raw_values"] = [new_haps[SNP_name]["raw_values"][i]
+                                                for i in idx for _ in range(2)]
+        return new_haps
+
+    controls_haps = split(chr_dict["haps"], controls_idx)
+    cases_haps = split(chr_dict["haps"], cases_idx)
+
+    try:
+        prefix = re.findall(r'chr\d+', chr_dict["directory"])[0] + "_"
+    except IndexError:
+        prefix = ""
+    if transposed:
+        transposed_prefix = "transposed_"
+    else:
+        transposed_prefix = ""
+
+    write_haps_file(controls_haps, path.join(chr_dict["directory"],
+                                             prefix + transposed_prefix + "input_controls.haps"),
+                    omit_info=separate_info, transposed=transposed)
+    write_haps_file(cases_haps, path.join(chr_dict["directory"],
+                                          prefix + transposed_prefix + "input_cases.haps"),
+                    omit_info=separate_info, transposed=transposed)
+    write_haps_file(chr_dict["haps"], path.join(chr_dict["directory"],
+                                                prefix.translate(None, "_") + ".info"),
+                    info_only=separate_info)
 
 if __name__ == "__main__":
     parser = make_argument_parser()
@@ -1063,7 +1158,12 @@ if __name__ == "__main__":
         else:
             raise ValueError("No haps or cases in %r." % dir_dict.keys())
 
-    if args.which == "compare":
+    if args.which == "separate":
+        chr_dict = read_chr_directory(args.chr_dir)
+        labels = parse_labels_file(args.labels)
+        split_haps(chr_dict, labels, args.separate_info, args.transposed)
+        
+    elif args.which == "compare":
         dir_dict_1 = read_chr_directory(args.dir_1)
         dir_dict_2 = read_chr_directory(args.dir_2)
 
