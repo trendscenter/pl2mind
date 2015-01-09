@@ -74,6 +74,7 @@ def montage(weights, fig=None, out_file=None,
     
     logger.info("Finished processing simtb montage")
     if out_file is not None:
+        logger.info("Saving montage to %s" % out_file)
         plt.savefig(out_file)
     else:
         plt.draw()
