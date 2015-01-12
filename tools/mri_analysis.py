@@ -9,6 +9,7 @@ import matplotlib
 matplotlib.use("Agg")
 import nipy
 import numpy as np
+import os
 from os import path
 from matplotlib import pyplot as plt
 from math import log
@@ -40,6 +41,8 @@ logger = logging.getLogger(__name__)
 try:
     from nice.pylearn2.models.nice import NICE
 except ImportError:
+    class NICE (object):
+        pass
     logger.warn("NICE not found, so hopefully you're not trying to load a NICE model.")
 
 def get_activations(model, dataset):
@@ -410,6 +413,9 @@ def main(model_path, out_path, args):
     """
     if args.prefix is None:
         prefix = ".".join(path.basename(model_path).split(".")[:-1])
+    out_path = path.join(out_path, prefix)
+    if not path.isdir(out_path):
+        os.mkdir(out_path)
 
     logger.info("Loading model from %s" % model_path)
     model = serial.load(model_path)
