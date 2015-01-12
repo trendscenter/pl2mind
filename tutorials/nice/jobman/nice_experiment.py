@@ -40,7 +40,7 @@ def default_hyperparams(input_dim=0):
         "prior": {
             "__builder__": "nice.pylearn2.models.nice.StandardNormal"
             },
-        "data_class": "MRI_Standard",
+        "data_class": "MRI_Transposed",
         "weight_decay": {
             "__builder__": "pylearn2.costs.mlp.L1WeightDecay",
             "coeffs": {"z": 0.01}
@@ -56,6 +56,15 @@ def make_argument_parser():
     parser.add_argument("-b", "--batch_size", default=None)
     parser.add_argument("-1", "--l1_decay", default=0.0, type=float)
     return parser
+
+results_of_interest = [
+    "valid_z_S_stddev_at_end",
+    "valid_z_S_over_2_stdev_at_end",
+    "valid_z_S_over_1_stdev_at_end",
+    "valid_term_1_l1_penalty_at_end",
+    "valid_objective_at_end",
+    "valid_cumulative_sum_at_end"
+]
 
 def extract_results(model):
     """
