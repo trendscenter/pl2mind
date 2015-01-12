@@ -22,7 +22,6 @@ from pylearn2.utils import serial
 import sys
 import warnings
 
-
 logging.basicConfig(format="[%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
@@ -243,6 +242,12 @@ def parse_file(file_name):
     logger.info("Parsing %s" % file_name)
     exts = ["bim", "haps", "tped", "gen"]
     ext = file_name.split(".")[-1]
+    if ext == "gzip":
+        open_method = gzip.open
+        ext = file_name.split(".")[-2]
+    else:
+        open_method = open
+
     if ext == "ped":
         return
     if ext not in exts:
@@ -257,7 +262,7 @@ def parse_file(file_name):
 
     parse_dict = {}
     parse_dict["ext"] = ext
-    with open(file_name, "r") as f:
+    with open_method(file_name, "r") as f:
         for line in f.readlines():
             entry = method_dict[ext](line)
             if entry[0] in parse_dict:
