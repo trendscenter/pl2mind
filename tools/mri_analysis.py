@@ -25,6 +25,7 @@ from pylearn2.neuroimaging_utils.tools import rois
 from pylearn2.neuroimaging_utils.tools import nifti_viewer
 from pylearn2.neuroimaging_utils.tools import simtb_viewer
 from pylearn2.models.dbm import DBM
+from pylearn2.models.dbm.dbm import RBM
 from pylearn2.models.vae import VAE
 from pylearn2.utils import serial
 from pylearn2.utils import sharedX
@@ -87,6 +88,10 @@ def get_activations(model, dataset):
         phi = model.encode_phi(X)
         activations = model.sample_from_q_z_given_x(epsilon=epsilon, phi=phi).eval()
         assert activations.shape[1] == model.nhid
+    elif isinstance(model, RBM):
+        X = sharedX(data)
+        hidden_layer = model.hidden_layers[0]
+        _, activations = hidden_layer.mf_update(X, state_above=None).eval()
     else:
         raise NotImplementedError("Cannot get activations for model of type %r. "
                                   "Needs to be implemented"
