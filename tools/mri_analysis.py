@@ -91,7 +91,8 @@ def get_activations(model, dataset):
     elif isinstance(model, RBM):
         X = sharedX(data)
         hidden_layer = model.hidden_layers[0]
-        _, activations = hidden_layer.mf_update(X, state_above=None).eval()
+        _, activations = hidden_layer.mf_update(X, state_above=None)
+        activations = activations.eval()
     else:
         raise NotImplementedError("Cannot get activations for model of type %r. "
                                   "Needs to be implemented"
