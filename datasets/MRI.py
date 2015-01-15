@@ -155,7 +155,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             train, test, or full.
         
         """
-        p = "${PYLEARN2_NI_PATH}/%s/" % dataset_name
+        p = path.join(self.dataset_root, dataset_name + "/")
 
         if not(path.isdir(serial.preprocess(p))):
             raise IOError("MRI dataset directory %s not found."
@@ -182,7 +182,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         return data_path, label_path
 
     def load_aod_gts(self):
-        p = "${PYLEARN2_NI_PATH}/aod_extra/"
+        p = path.join(self.dataset_root, "aod_extra/")
 
         if not(path.isdir(serial.preprocess(p))):
             raise IOError("AOD extras directory %s not found."
@@ -206,7 +206,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         mask: array-like
             4D array of 1 and 0 values.
         """
-        p = "${PYLEARN2_NI_PATH}/%s/" % dataset_name
+        p = path.join(self.dataset_root, dataset_name + "/")
         mask_path = serial.preprocess(p + "mask.npy")
         mask = np.load(mask_path)
         if not np.all(np.bitwise_or(mask == 0, mask == 1)):
@@ -323,7 +323,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             Nifti image from topological view.
         """
         m, r, c, d = topo_view.shape
-        base_nifti_path = serial.preprocess("${PYLEARN2_NI_PATH}/mri_extra/basenifti.nii")
+        base_nifti_path = serial.preprocess(path.join(self.dataset_root, "mri_extra", "basenifti.nii"))
         base_nifti = load_image(base_nifti_path)
 
         image = Image.from_image(base_nifti, data=topo_view.transpose((1, 2, 3, 0)))
@@ -408,7 +408,8 @@ class MRI_Standard(MRI):
                  distorter=None,
                  dataset_name="smri",
                  start=None,
-                 stop=None):
+                 stop=None,
+                 dataset_root="${PYLEARN2_NI_PATH}"):
 
         self.__dict__.update(locals())
         del self.self
@@ -475,15 +476,16 @@ class MRI_Standard(MRI):
 
 class MRI_On_Memory(MRI_Standard):
         def __init__(self,
-                 which_set,
-                 center=False,
-                 variance_normalize=False,
-                 shuffle=False,
-                 apply_mask=False,
-                 preprocessor=None,
-                 dataset_name="smri",
-                 start=None,
-                 stop=None):
+                     which_set,
+                     center=False,
+                     variance_normalize=False,
+                     shuffle=False,
+                     apply_mask=False,
+                     preprocessor=None,
+                     dataset_name="smri",
+                     start=None,
+                     stop=None,
+                     dataset_root="${PYLEARN2_NI_PATH}"):
             warnings.warn("MRI_On_Memory should be replaced by MRI_Standard", DeprecationWarning)
             super(MRI_On_Memory, self).__init__(which_set, center, variance_normalize,
                                                 shuffle, apply_mask, preprocessor, dataset_name,
@@ -506,7 +508,8 @@ class MRI_Transposed(MRI):
                  apply_mask=False,
                  distorter=None,
                  start=None,
-                 stop=None):
+                 stop=None,
+                  dataset_root="${PYLEARN2_NI_PATH}"):
 
         self.__dict__.update(locals())
         del self.self
