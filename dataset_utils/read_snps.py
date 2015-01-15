@@ -70,23 +70,24 @@ def parse_haps_line(line):
         Dictionary entry with SNP name as key.
     """
     elems = line.translate(None, "\n").split(" ")
+    elems = [e for e in elems if e != ""]
 
     try:
-        assert (len(elems) - 5) % 2 == 0
+        assert (len(elems) - 5) % 2 == 0, "Line length error (%s)" % (elems, )
         chromosome = int(elems[0])
         SNP_name = elems[1]
         location = int(elems[2])
         minor = int(elems[3])
         major = int(elems[4])
-        assert (minor, major) in [(1, 2), (2, 1)]
+        assert (minor, major) in [(1, 2), (2, 1)], "Minor major error (%s)" % ((minor, major),)
         values = np.zeros((len(elems) - 5) // 2, dtype=np.int8)
         for i in range(5, len(elems), 2):
             x = int(elems[i])
             y = int(elems[i+1])
-            assert (x, y) in [(0, 0), (0, 1), (1, 0), (1, 1)]
+            assert (x, y) in [(0, 0), (0, 1), (1, 0), (1, 1)], "Value error (%s)" % ((x, y),)
             values[(i - 5) // 2] = x + y
-    except AssertionError:
-        raise ValueError("Could not parse haps line \"%s\"" % line)
+    except AssertionError as e:
+        raise ValueError("Could not parse haps line \"%s\" (%s)" % (line, e))
 
     return (SNP_name, {"location": location, "chromosome": chromosome,
                        "minor": minor, "major": major, "values": values,
@@ -181,6 +182,60 @@ def parse_gen_line(line):
     return (SNP_name, {"location": location, "values": values,
                       "allele_1": allele_1, "allele_2": allele_2})
 
+def parse_dat_file(dat_file):
+    """
+    Parse a complete dat file.
+    dat files are transposed wrt the rest of the data formats here. In addition, they only contain integer fields,
+    so we can use np.loadtxt.
+    First 6 columns are ignored.
+    Note: must have a bims and info file to process completely.
+
+    Parameters
+    ----------
+    dat_file: str
+        Path for dat file to process.
+
+    Returns
+    -------
+    data: array-like
+    """
+
+    data = np.loadtxt(dat_file)
+    data = data[:, 6:].T
+    return data
+
+def convert_dat_to_haps(data, info_dict):
+    """
+    Converts dat to haps.
+
+    Parameters
+    ----------
+    data: array-like
+        Data to be converted
+    info_dict: dict
+        Haps dictionary with empty info_dict["values"]
+
+    Returns
+    -------
+    new_haps_dict: dict
+        New haps dictionary from data
+    """
+    
+    assert info_dict["ext"] == "info"
+    assert (len(info_dict) - 1) == (data.shape[0] // 2), (len(info_dict), data.shape)
+
+    new_haps_dict = copy.deepcopy(info_dict)
+    keys = [k for k in info_dict.keys() if k != "ext"]
+    data_idx = [info_dict[k]["line_number"] for k in keys]
+    for j, SNP_name in enumerate(keys):
+        i = data_idx[j]
+        data_entry = data[i]
+        value_entry = np.zeros(data_entry.shape[0] // 2)
+        for k in xrange(data_entry.shape[0] // 2):
+            value_entry[k] = (data_entry[k:k+2].sum()) - 2
+
+    return new_haps_dict
+
 def parse_labels_file(label_file):
     """
     Parses a labels file.
@@ -240,7 +295,7 @@ def parse_file(file_name):
         Dictionary with SNP name keys.
     """
     logger.info("Parsing %s" % file_name)
-    exts = ["bim", "haps", "tped", "gen"]
+    exts = ["bim", "haps", "tped", "gen", "info"]
     ext = file_name.split(".")[-1]
     if ext == "gzip":
         open_method = gzip.open
@@ -254,17 +309,20 @@ def parse_file(file_name):
         raise NotImplementedError("Extension not supported (%s), must be in %s" % (ext, exts))
 
 
-    method_dict = {"bim": parse_bim_line,
-                   "haps": parse_haps_line,
-                   "tped": parse_tped_line,
-                   "gen": parse_gen_line,
-                   }
+    method_dict = {
+        "bim": parse_bim_line,
+        "haps": parse_haps_line,
+        "info": parse_haps_line,
+        "tped": parse_tped_line,
+        "gen": parse_gen_line,
+        }
 
     parse_dict = {}
     parse_dict["ext"] = ext
     with open_method(file_name, "r") as f:
-        for line in f.readlines():
+        for i, line in enumerate(f.readlines()):
             entry = method_dict[ext](line)
+            entry[1]["line_number"] = i
             if entry[0] in parse_dict:
                 raise ValueError("Found a duplicate SNP(%s) in .%s file." % (entry[0], ext))
             parse_dict[entry[0]] = entry[1]
@@ -291,8 +349,16 @@ def read_chr_directory(directory):
     snp_dict = {"directory": directory}
     for ext in file_dict:
         file_name = path.join(directory, file_dict[ext])
+        if ext == "dat":
+            continue
         parse_dict = parse_file(file_name)
         snp_dict[ext] = parse_dict
+
+    if "dat" in file_dict:
+        file_name = path.join(directory, file_dict["dat"])
+        data = parse_dat_file(file_name)
+        parse_dict = convert_dat_to_haps(data, snp_dict["info"])
+        snp_dict["haps"] = parse_dict
 
     if "tped" in snp_dict:
         snp_dict["haps"] = dict((k, snp_dict["haps"][k])
@@ -320,6 +386,7 @@ def read_chr_directory(directory):
             if "tped" in snp_dict:
                 snp_dict["tped"][key]["minor_allele"] = minor_allele
                 snp_dict["tped"][key]["major_allele"] = major_allele
+
     return snp_dict
 
 def parse_chr_directory(directory):
@@ -337,6 +404,7 @@ def parse_chr_directory(directory):
     file_dict: dict
         Dictionary of extension keys and file path values.
     """
+
     # We need to ignore these files for now.
     ignore_strings = ["HAPGENinput", "input"]
     files = [f for f in listdir(directory) if path.isfile(path.join(directory,f))]
@@ -359,14 +427,14 @@ def parse_chr_directory(directory):
 
     for f_name in files:
         ext = f_name.split(".")[-1]
+        if ext == "gz":
+            ext = f_name.split(".")[-2]
         if ext == "haps":
             # Gen directories will have 2 haps files...
             if not "cases" in f_name:
                 insert(ext, f_name)
-        elif ext in ["bim", "ped", "gen", "tped"]:
+        elif ext in ["bim", "ped", "gen", "tped", "info", "dat"]:
             insert(ext, f_name)
-        elif ext == "tped":
-            logger.warn("tpeds ignored for now.")
         else:
             logger.warn("Unknown file type %s" % ext)
 #            raise ValueError("Unknown file type %s" % ext)
@@ -376,10 +444,14 @@ def parse_chr_directory(directory):
         file_dict = dict((f, file_dict[f]) for f in ["cases", "controls"])
     else:
         for key in ["bim", "haps"]:
-            if key not in file_dict:
-                raise ValueError("%s not found in %s" % (key, directory))
+            if key not in file_dict and ("dat" not in file_dict):
+                raise ValueError("%s not found in %s (%s)" % (key, directory, file_dict))
         if "tped" not in file_dict:
             logger.warning("tped file not found in %s, process only with .haps" % directory)
+
+    if "dat" in file_dict:
+        assert "info" in file_dict
+        assert "bim" in file_dict
 
     logger.info("Parsed %s to %r" % (directory, file_dict))
     return file_dict
@@ -1137,11 +1209,13 @@ def split_haps(chr_dict, labels, separate_info=False, transposed=False):
     else:
         transposed_prefix = ""
 
-    write_haps_file(controls_haps, path.join(chr_dict["directory"],
-                                             prefix + transposed_prefix + "input_controls.haps"),
+    write_haps_file(controls_haps, 
+                    path.join(chr_dict["directory"],
+                              prefix + transposed_prefix + "input_controls.haps"),
                     omit_info=separate_info, transposed=transposed)
-    write_haps_file(cases_haps, path.join(chr_dict["directory"],
-                                          prefix + transposed_prefix + "input_cases.haps"),
+    write_haps_file(cases_haps,
+                    path.join(chr_dict["directory"],
+                              prefix + transposed_prefix + "input_cases.haps"),
                     omit_info=separate_info, transposed=transposed)
     write_haps_file(chr_dict["haps"], path.join(chr_dict["directory"],
                                                 prefix.translate(None, "_") + ".info"),
