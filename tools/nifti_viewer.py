@@ -73,8 +73,8 @@ def montage(nifti, anat, roi_dict, thr=2,
         coords = roi["top_clust"]["coords"]
         assert coords is not None
 
-        stdout.write("\rSaving montage: %d   " % f)
-        stdout.flush()
+#        stdout.write("\rSaving montage: %d   " % f)
+#        stdout.flush()
             
         feat = weights[:, :, :, f]
         feat = feat / feat.std()
@@ -131,7 +131,7 @@ def montage(nifti, anat, roi_dict, thr=2,
                                                  fc="none")
                         ax.add_patch(p_fancy)
     
-    stdout.write("\rSaving montage: DONE\n")
+#    stdout.write("\rSaving montage: DONE\n")
     if out_file is not None:
         plt.savefig(out_file, transparent=True, facecolor=(bgcol, bgcol, bgcol))
     else:

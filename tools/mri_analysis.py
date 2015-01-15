@@ -17,6 +17,7 @@ from math import sqrt
 
 from pylearn2.config import yaml_parse
 from pylearn2.neuroimaging_utils.datasets import dataset_info
+from pylearn2.neuroimaging_utils.datasets import MRI as MRI_module
 from pylearn2.neuroimaging_utils.datasets.MRI import MRI
 from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Standard
 from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Transposed
@@ -384,26 +385,23 @@ def nice_spectrum(model):
     spectrum = np.exp(-spectrum)
     return spectrum
 
-def resolve_dataset(model):
+def resolve_dataset(model, dataset_root=None):
     """
     Resolves the full dataset from the model.
     """
 
     logger.info("Resolving full dataset from training set.")
-    dataset = yaml_parse.load(model.dataset_yaml_src)
-    if isinstance(dataset, MRI_Standard):
-        dataset = MRI_Standard(
-            which_set = "full",
-            even_input=dataset.even_input,
-            center=dataset.center,
-            variance_normalize=dataset.variance_normalize,
-            unit_normalize=dataset.unit_normalize,
-            apply_mask=dataset.apply_mask,
-            dataset_name=dataset.dataset_name,
-            )
+    dataset_yaml = model.dataset_yaml_src
+    if "MRI_Standard" in dataset_yaml:
+        dataset_yaml = dataset_yaml.replace("train", "full")
+    if dataset_root is not None:
+        dataset_yaml = dataset_yaml[:-2] + ", dataset_root: %s" % dataset_root + "}"
+ 
+    dataset = yaml_parse.load(dataset_yaml)
     return dataset
 
-def main(model_path, out_path, args):
+def main(model_path, out_path, target_stat, zscore=False, 
+         prefix=None, dataset_root=None):
     """
     Main function of module.
     This function controls the high end analysis functions.
@@ -417,16 +415,21 @@ def main(model_path, out_path, args):
     args: dict
         argparse arguments (defined below).
     """
-    if args.prefix is None:
+    if prefix is None:
         prefix = ".".join(path.basename(model_path).split(".")[:-1])
     out_path = path.join(out_path, prefix)
     if not path.isdir(out_path):
         os.mkdir(out_path)
 
+    logger.info("Logger is set to %s" % logger.level)
+    # This is a hack for loggers
+    simtb_viewer.logger.level = logger.level
+    MRI_module.logger.level = logger.level
+#    nifti_viewer.logger.level = logger.level
     logger.info("Loading model from %s" % model_path)
     model = serial.load(model_path)
     logger.info("Extracting dataset")
-    dataset = resolve_dataset(model)
+    dataset = resolve_dataset(model, dataset_root)
     if isinstance(dataset, MRI_Transposed):
         transposed_features = True
     else:
@@ -435,30 +438,30 @@ def main(model_path, out_path, args):
     feature_dict = {}
 
     if isinstance(model, NICE):
-        spectrum_path = path.join(out_path, prefix + "_spec.pdf")
+        spectrum_path = path.join(out_path, "spectrum.pdf")
         f = plt.figure()
         spectrum = nice_spectrum(model)
         plt.plot(spectrum)
         f.savefig(spectrum_path)
 
     logger.info("Getting features")
-    features = get_features(model, args.zscore, transposed_features,
+    features = get_features(model, zscore, transposed_features,
                             dataset, feature_dict=feature_dict)
     set_experiment_info(model, dataset, feature_dict)
     
 
-    pdf_path = path.join(out_path, prefix + ".pdf")
+    pdf_path = path.join(out_path, "montage.pdf")
     if dataset.dataset_name in dataset_info.simtb_datasets:
         save_simtb_montage(dataset, features, pdf_path,
                            feature_dict=feature_dict,
-                           target_stat=args.target_stat,
+                           target_stat=target_stat,
                            target_value=2.)
     else:
         nifti_path = path.join(out_path, prefix + ".nii")
         nifti = get_nifti(dataset, features, out_file=nifti_path)
         save_nii_montage(nifti, nifti_path,
                          pdf_path, feature_dict=feature_dict,
-                         target_stat=args.target_stat,
+                         target_stat=target_stat,
                          target_value=2.)
     logger.info("Done.")
 
@@ -475,6 +478,7 @@ def make_argument_parser():
     parser.add_argument("--zscore", action="store_true")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show more verbosity!")
     parser.add_argument("--target_stat", default="sz_t")
+    parser.add_argument("-d", "--dataset_root", default=None, help="If specified, use another user's data root")
     return parser
 
 if __name__ == "__main__":
@@ -486,4 +490,5 @@ if __name__ == "__main__":
         out_path = args.out_dir
     if args.verbose:
         logger.setLevel(logging.DEBUG)
-    main(args.model_path, out_path, args)
+    main(args.model_path, out_path, args.target_stat, args.zscore, args.prefix, 
+         args.dataset_root)
