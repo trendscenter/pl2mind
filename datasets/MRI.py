@@ -105,24 +105,20 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                                  "incompatible shapes: %r vs %r"
                                  % (X.shape, self.targets.shape))
 
-        if self.center:
-            X -= X.mean()
-
-        if (self.unit_normalize and self.variance_normalize):
-            logger.warn("Unit and variance normalize have conflicting function."
-                        "Picking unit normalization. If you wish to use variance"
-                        "normalization, please set unit normalization to \"False\" (default)")
+        if self.variance_normalize:
+            if self.center:
+                X -= X.mean(axis=0)
+            X /= X.std(axis=0)
 
         if self.unit_normalize:
+            if self.center:
+                X -= X.mean()
+
             X -= X.min()
             X /= X.max()
             X = (X - .5) * 2
             assert abs(np.amax(X) - 1) < 0.08, np.amax(X)
             assert np.amin(X) == -1, np.amin(X)
-
-        if self.variance_normalize:
-            X -= X.mean(axis=0)
-            X /= X.std(axis=0)
 
         if self.shuffle:
             self.shuffle_rng = make_np_rng(None, [1 ,2 ,3], which_method="shuffle")
