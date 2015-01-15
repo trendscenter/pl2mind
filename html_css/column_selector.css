@@ -69,3 +69,16 @@
 .popover {
 	margin-top: -65px; /* adjust popover position */
 }
+
+#pdfModal .modal-dialog {
+    width: 70%;
+    height: 70%;
+}
+
+.modal-dialog.large {
+    width: 80%; /* respsonsive width */
+}
+
+.modal-dialog.small {
+    width: 40%; /* respsonsive width */
+}

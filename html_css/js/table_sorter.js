@@ -110,35 +110,69 @@ $(function(){
   // initialize column selector using default settings
   // note: no container is defined!
     $(".bootstrap-popup3").tablesorter({
-    theme: 'blue',
-      widgets: ['zebra', 'columnSelector', 'stickyHeaders'],
-      widgetOptions : {
-      columnSelector_columns : {
-        0: 'disable'
-      },
-      columnSelector_saveColumns: true,
-      columnSelector_layout : '<div><label><input type="checkbox">{name}</label></div>',
-      columnSelector_mediaquery: false,
-      columnSelector_mediaqueryName: 'Auto: ',
-      columnSelector_mediaqueryState: true,
-      columnSelector_breakpoints : [ '20em', '30em', '40em', '50em', '60em', '70em' ],
-      columnSelector_priority : 'data-priority',
-      columnSelector_cssChecked : 'checked'
-    }
-  });
+	theme: 'blue',
+	widgets: ['zebra', 'columnSelector', 'stickyHeaders'],
+	widgetOptions : {
+	    columnSelector_columns : {
+		0: 'disable'
+	    },
+	    columnSelector_saveColumns: true,
+	    columnSelector_layout : '<div><label><input type="checkbox">{name}</label></div>',
+	    columnSelector_mediaquery: false,
+	    columnSelector_mediaqueryName: 'Auto: ',
+	    columnSelector_mediaqueryState: true,
+	    columnSelector_breakpoints : [ '20em', '30em', '40em', '50em', '60em', '70em' ],
+	    columnSelector_priority : 'data-priority',
+	    columnSelector_cssChecked : 'checked'
+	}
+    });
+
 });
 
+$(function() {
+    setInterval(function() {
+	var dirnames = document.getElementsByClassName("cd-popup-trigger");
+	for (var i=0; i < dirnames.length; ++i) {
+	    color_view_button($(dirnames[i]).attr("dir"));
+	}
+    }, 10 * 1000);
+});
+
+function color_view_button(dirname) {
+    console.log("coloring " + dirname);
+    var button = document.getElementById(dirname);
+    $.ajax({
+	url: dirname,
+	type: "GET",
+	async: true,
+	success: function() {
+	    $(button).removeClass("off");
+	},
+	error: function() {
+	    $(button).addClass("off");
+	}
+    });
+}
+
 function checkDir(dirname) {
+    var myRegexp = /href="([^"]*[\.pdf])"/g;
+    var foldertxt;
     $.ajax({
 	url: dirname,
 	type: "get",
 	async: false, 
-	success: function() {
-            rval = "<a href=" + dirname  + ">" + dirname + "</a>";
+	success: function(txt) {
+            foldertxt = txt;
 	},
 	error:function() {
-	    rval =  dirname;
+	    return new Array();
 	}
     });
-    return rval;
+    var fList = new Array();
+    match = myRegexp.exec(foldertxt);
+    while (match != null) {
+	fList.push(match[1]);
+	match = myRegexp.exec(foldertxt);
+    }
+    return fList;
 }
