@@ -228,11 +228,12 @@ def convert_dat_to_haps(data, info_dict):
     keys = [k for k in info_dict.keys() if k != "ext"]
     data_idx = [info_dict[k]["line_number"] for k in keys]
     for j, SNP_name in enumerate(keys):
-        i = data_idx[j]
-        data_entry = data[i]
-        value_entry = np.zeros(data_entry.shape[0] // 2)
-        for k in xrange(data_entry.shape[0] // 2):
-            value_entry[k] = (data_entry[k:k+2].sum()) - 2
+        i = 2 * data_idx[j]
+        data_entry = data[i:i+2]
+        assert data_entry.shape[0] == 2, data_entry.shape
+        value_entry = data_entry.sum(axis=0) - 2
+        
+        new_haps_dict[SNP_name]["values"] = value_entry
 
     return new_haps_dict
 
