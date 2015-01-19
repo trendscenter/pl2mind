@@ -49,7 +49,6 @@ class GaussianMRICorruptor(corruption.Corruptor):
     """
 
     def __init__(self, stdev, variance_map, rng=2001):
-#        variance_map = np.load(variance_map)
         self.variance_map = sharedX(variance_map)
         super(GaussianMRICorruptor, self).__init__(corruption_level=stdev,
                                                 rng=rng)
@@ -105,15 +104,28 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                                  "incompatible shapes: %r vs %r"
                                  % (X.shape, self.targets.shape))
 
+        if self.center:
+            X -= X.mean()
+
+        if self.demean:
+            assert isinstance(self.demean, int)
+            if self.demean == 1:
+                X -= X.mean(axis = 0)
+            elif self.demean == 2:
+                X = (X.T - X.mean(1)).T
+            else:
+                raise NotImplementedError
+
         if self.variance_normalize:
-            if self.center:
-                X -= X.mean(axis=0)
-            X /= X.std(axis=0)
+            assert isinstance(self.variance_normalize, int)
+            if self.variance_normalize == 1:
+                X /= X.std(axis = 0)
+            elif self.variance_normalize == 2:
+                X = (X.T / X.std(axis = 1)).T
+            else:
+                raise NotImplementedError
 
         if self.unit_normalize:
-            if self.center:
-                X -= X.mean()
-
             X -= X.min()
             X /= X.max()
             X = (X - .5) * 2
@@ -396,6 +408,7 @@ class MRI_Standard(MRI):
                  which_set,
                  even_input=False,
                  center=False,
+                 demean=False,
                  variance_normalize=False,
                  unit_normalize=False,
                  shuffle=False,
@@ -498,6 +511,7 @@ class MRI_Transposed(MRI):
                  dataset_name="smri",
                  even_input=False,
                  center=False,
+                 demean=False,
                  variance_normalize=False,
                  unit_normalize=False,
                  shuffle=False,
@@ -505,7 +519,7 @@ class MRI_Transposed(MRI):
                  distorter=None,
                  start=None,
                  stop=None,
-                  dataset_root="${PYLEARN2_NI_PATH}"):
+                 dataset_root="${PYLEARN2_NI_PATH}"):
 
         self.__dict__.update(locals())
         del self.self

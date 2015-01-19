@@ -52,6 +52,13 @@ def get_job_dict(experiment_module, args):
         params["status"] = job.status
         params["id"] = job.id
         params["file_prefix"] = file_prefix
+#        params["host"] = job["jobman.sql.host_name"]
+
+        try:
+            params["pid"] = job.jobman_pid
+        except:
+            pass
+
         if job.status in [0, 3, 4, 5]:
             results = {}
         elif job.status in [1, 2]:
@@ -89,7 +96,7 @@ def check_results_dir(table_dir, file_prefix):
     return path.isdir(path.join(table_dir, file_prefix.split("/")[-1]))
 
 def table_worker(experiment_module, args, job_dict,
-                 update_event, message_queue, model_queue):
+                 update_event, message_queue, model_queue, in_queue):
     assert isinstance(args, argparse.Namespace), type(args)
     
     results_of_interest = experiment_module.results_of_interest
@@ -107,14 +114,17 @@ def table_worker(experiment_module, args, job_dict,
                 table_dir, new_job_dict[j_id]["params"]["file_prefix"])
                                 and new_job_dict[j_id]["status"] == 2]
         
-        new_finished_jobs = [new_job_dict[j]["params"]["file_prefix"]
-                             for j in job_dict.keys() 
-                             if (new_job_dict[j]["status"] == 2 
-                                 and job_dict[j]["status"] == 1)]
+        new_finished_jobs = [j_id
+                             for j_id in job_dict.keys() 
+                             if (new_job_dict[j_id]["status"] == 2 
+                                 and job_dict[j_id]["status"] == 1)]
 
         for job_id in unprocessed_finished + new_finished_jobs:
-            message_queue.put("Adding job %d to processing queue" %job_id)
-            model_queue.put(new_job_dict[job_id]["params"]["file_prefix"])
+            prefix = new_job_dict[job_id]["params"]["file_prefix"]
+            if not prefix in in_queue:
+                message_queue.put("Adding job %d to processing queue (%s)" % (job_id, prefix))
+                in_queue.append(prefix)
+                model_queue.put(prefix)
 
         job_dict.update(new_job_dict)
         backup_table_file = path.join(table_dir, "table.pkl")
@@ -123,6 +133,7 @@ def table_worker(experiment_module, args, job_dict,
         message_queue.put("Finishing processing table")
 
         message_queue.put("Making HTML table")
+        html.clear()
         for status in [2, 1, 0, 3]:
             jobs = [(v["params"], v["results"]) for v in job_dict.values()
                     if ((v["status"] == status) if status != 3
@@ -137,17 +148,19 @@ def table_worker(experiment_module, args, job_dict,
 
         update_event.clear()
 
-def model_worker(args, model_queue, message_queue):
+def model_worker(args, model_queue, message_queue, in_queue):
     mri_analysis.logger.level = 40
     table_dir = serial.preprocess(path.join(args.out_dir, args.table))
     q = model_queue.get()
     while q:
         file_prefix = q
+        #probably a better way to do this
         message_queue.put("Processing model %s" % file_prefix)
         mri_analysis.main(file_prefix + ".pkl",
                           table_dir,
                           "",
                           prefix=file_prefix.split("/")[-1])
+        in_queue.remove(file_prefix)
         message_queue.put("Finished processing model %s" % file_prefix)
         time.sleep(5)
         q = model_queue.get()
@@ -173,6 +186,8 @@ def main(args):
 
     manager = mp.Manager()
     job_dict = manager.dict()
+    in_queue = manager.list()
+
     message_queue = mp.Queue()
     message_process = mp.Process(target=message_worker,
                                  args=(message_queue, ))
@@ -181,7 +196,8 @@ def main(args):
     model_queue = mp.Queue()
     model_process = mp.Process(target=model_worker,
                                args=(args, model_queue,
-                                     message_queue))
+                                     message_queue,
+                                     in_queue))
     model_process.start()
 
     update_event = mp.Event()
@@ -190,7 +206,8 @@ def main(args):
                                      args, job_dict, 
                                      update_event,
                                      message_queue,
-                                     model_queue))
+                                     model_queue,
+                                     in_queue))
     table_process.start()
 
     table_dir = serial.preprocess(path.join(args.out_dir, args.table))
@@ -218,11 +235,23 @@ def main(args):
     process_parser.set_defaults(which="process")
     process_parser.add_argument("job_id", type=int)
 
+    quit_parser = subparsers.add_parser("quit")
+    quit_parser.set_defaults(which="quit")
+
     while True:
         command = raw_input("$: ")
         try:
             a = parser.parse_args(command.split())
-            if a.which == "process":
+            if a.which == "quit":
+                message_queue.put("Quitting")
+                table_process.terminate()
+                update_process.terminate()
+                model_process.terminate()
+                message_process.join()
+                message_process.terminate()
+                return
+            elif a.which == "process":
+                in_queue.append(job_dict[a.job_id]["params"]["file_prefix"])
                 model_queue.put(job_dict[a.job_id]["params"]["file_prefix"])
         except:
             pass
