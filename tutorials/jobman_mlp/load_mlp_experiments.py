@@ -20,6 +20,7 @@ from os import path
 from pylearn2.config import yaml_parse
 from pylearn2.neuroimaging_utils.datasets import MRI
 from pylearn2.neuroimaging_utils.dataset_utils import mri_nifti
+from pylearn2.neuroimaging_utils.tools import jobman_generators as jg
 from pylearn2.neuroimaging_utils.tutorials.jobman_mlp import mlp_experiment
 from pylearn2.utils import serial
 
@@ -43,7 +44,7 @@ def learning_rate_generator(num, start, finish):
         yield exp(log(start) + float(n) / float(num - 1) * (log(finish) - log(start)))
 
 def load_experiments(args):
-    dataset_name = "smri"
+    dataset_name = args.dataset_name
     db = sql.db("postgres://%(user)s@%(host)s:%(port)d/%(database)s?table=%(table)s"
                 % {"user": args.user,
                    "host": args.host,
@@ -67,45 +68,49 @@ def load_experiments(args):
     variance_map_file = path.join(data_path, "variance_map.npy")
     mri_nifti.save_variance_map(mri, variance_map_file)
 
-    for nhid1 in hidden_generator(4):
-        for nhid2 in hidden_generator(4):
-            for lr in learning_rate_generator(5, 0.1, 0.00001):
-                logger.info("Adding MLP experiment with %d units on first hidden layer "
-                            "and %d units on second and learning rate of %f"
-                            % (nhid1, nhid2, lr))
-                state = DD()
-                
-                experiment_hyperparams = mlp_experiment.default_hyperparams(input_dim)
-                experiment_hyperparams["nhid1"] = nhid1
-                experiment_hyperparams["nhid2"] = nhid2
-                experiment_hyperparams["learning_rate"] = lr
-                experiment_hyperparams["dataset_name"] = dataset_name
+    for items in jg.nested_generator(jg.hidden_generator("nhid1", 1),
+                                     jg.hidden_generator("nhid2", 1),
+                                     ):
 
-                h = abs(hash(frozenset(flatten(experiment_hyperparams).keys() +\
-                                           flatten(experiment_hyperparams).values())))
+        state = DD()
+        experiment_hyperparams = mlp_experiment.default_hyperparams(input_dim)
 
-                user = path.expandvars("$USER")
-                save_path = serial.preprocess("/export/mialab/users/%s/pylearn2_outs/%d"
-                                              % (user, h))
+        for key, value in items:
+            split_keys = key.split(".")
+            entry = experiment_hyperparams
+            for k in split_keys[:-1]:
+                entry = entry[k]
+            entry[split_keys[-1]] = value
+        
+        experiment_hyperparams["dataset_name"] = dataset_name
 
-                file_params = {
-                    "save_path": save_path,
-                    "variance_map_file": variance_map_file,
-                    }
+        h = abs(hash(frozenset(flatten(experiment_hyperparams).keys() +\
+                                   flatten(experiment_hyperparams).values())))
 
-                state.file_parameters = file_params
-                state.hyper_parameters = experiment_hyperparams
+        user = path.expandvars("$USER")
+        save_path = serial.preprocess("/export/mialab/users/%s/pylearn2_outs/%d"
+                                      % (user, h))
 
-                sql.insert_job(
-                    mlp_experiment.experiment,
-                    flatten(state),
-                    db
-                    )
+        file_params = {
+            "save_path": save_path,
+            "variance_map_file": variance_map_file,
+            }
+
+        state.file_parameters = file_params
+        state.hyper_parameters = experiment_hyperparams
+        state.pid = 0
+
+        sql.insert_job(
+            mlp_experiment.experiment,
+            flatten(state),
+            db
+            )
 
     db.createView("%s_view" % args.table)
 
 def make_argument_parser():
     parser = argparse.ArgumentParser()
+    parser.add_argument("dataset_name")
     parser.add_argument("user")
     parser.add_argument("host")
     parser.add_argument("port", type=int)

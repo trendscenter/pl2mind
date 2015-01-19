@@ -46,12 +46,11 @@ def float_generator(param_name, num, start, finish, log_scale=False):
         else:
             yield (param_name, (start + float(n) / float(num - 1) * (finish - start)))
 
-def layer_depth_generator(param_name, num, min_depth, max_depth):
-    assert min_depth > 0
-    assert max_depth > min_depth
-    assert isinstance(min_depth, int)
-    assert isinstance(max_depth, int)
+def layer_depth_generator(param_name, num, depths):
+    assert isinstance(depths, (int, collections.Iterable))
     assert isinstance(num, (int, collections.Iterable))
+    if isinstance(depths, int):
+        depth_iterator = xrange(depths, depths + 1)
     if isinstance(num, int):
         iterator = xrange(num, num + 1)
     else:
@@ -59,8 +58,8 @@ def layer_depth_generator(param_name, num, min_depth, max_depth):
 
     for num in iterator:
         assert num > 1
-        for outer in xrange(min_depth, max_depth + 1):
-            for inner in xrange(min_depth, max_depth + 1):
+        for outer in depth_iterator:
+            for inner in depth_iterator:
                 yield (param_name, [outer] + [inner] * (num - 2) + [outer])
 
 def nested_generator(*args):
@@ -77,28 +76,47 @@ def load_experiments(args):
                    "table": args.table,
                    })
 
-    logger.info("Getting dataset info for %s" % dataset_name)
-    data_path = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
-    mask_file = path.join(data_path, "mask.npy")
-    mask = np.load(mask_file)
-    input_dim = (mask == 1).sum()
-    if input_dim % 2 == 1:
-        input_dim -= 1
-    mri = MRI.MRI_Standard(which_set="full",
-                           dataset_name=dataset_name,
-                           unit_normalize=True,
-                           even_input=True,
-                           apply_mask=True)
-    variance_map_file = path.join(data_path, "variance_map.npy")
+    logger.info("Getting dataset info for %s%s"
+                % (dataset_name, ", transposed" if args.transposed else ""))
+    data_path = serial.preprocess("${PYLEARN2_NI_PATH}/" + args.dataset_name)
+
+    if args.transposed:
+        logger.info("Data in transpose...")
+        mri = MRI.MRI_Transposed(dataset_name=args.dataset_name,
+                                 unit_normalize=True,
+                                 even_input=True,
+                                 apply_mask=True)
+        input_dim = mri.X.shape[1]
+        variance_map_file = path.join(data_path, "transposed_variance_map.npy")
+    else:
+        mask_file = path.join(data_path, "mask.npy")
+        mask = np.load(mask_file)
+        input_dim = (mask == 1).sum()
+        if input_dim % 2 == 1:
+            input_dim -= 1
+        mri = MRI.MRI_Standard(which_set="full",
+                               dataset_name=args.dataset_name,
+                               unit_normalize=True,
+                               even_input=True,
+                               apply_mask=True)
+        variance_map_file = path.join(data_path, "variance_map.npy")
+
     mri_nifti.save_variance_map(mri, variance_map_file)
 
-    for items in nested_generator(layer_depth_generator("encoder.layer_depths", xrange(4, 6), 3, 4),
+    for items in nested_generator(layer_depth_generator("encoder.layer_depths", 
+                                                        xrange(4, 6), 5),
                                   hidden_generator("encoder.nhid", 4),
                                   float_generator("weight_decay.coeffs.z", 3, 0.1, 0.001, log_scale=True)):
 #        logger.info("Adding NICE experiment with hyperparameters %s" % (items, ))
         state = DD()
 
-        experiment_hyperparams = nice_experiment.default_hyperparams(input_dim)                
+        experiment_hyperparams = nice_experiment.default_hyperparams(input_dim)
+        if args.transposed:
+            experiment_hyperparams["data_class"] = "MRI_Transposed"
+        if args.logistic:
+            experiment_hyperparams["prior"]["__builder__"] =\
+                "nice.pylearn2.models.nice.StandardLogistic"
+
         for key, value in items:
             split_keys = key.split(".")
             entry = experiment_hyperparams
@@ -138,7 +156,9 @@ def make_argument_parser():
     parser.add_argument("database")
     parser.add_argument("table")
     parser.add_argument("-v", "--verbose", action="store_true")
-
+    parser.add_argument("-t", "--transposed", action="store_true")
+    parser.add_argument("-l", "--logistic", action="store_true")
+    
     return parser
 
 if __name__ == "__main__":

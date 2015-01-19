@@ -2,6 +2,8 @@ import argparse
 from jobman.tools import expand
 from jobman.tools import flatten
 
+import multiprocessing as mp
+import os
 from os import path
 
 from pylearn2.config import yaml_parse
@@ -86,7 +88,10 @@ def experiment(state, channel):
         yaml_template = yaml_template.replace("%%(%s)s" % param, file_params[param])
 
     yaml = yaml_template % hyper_parameters
+
     train_object = yaml_parse.load(yaml)
+    state.pid = os.getpid()
+    channel.save()
     
     train_object.main_loop()
     state.results = extract_results(train_object.model)
