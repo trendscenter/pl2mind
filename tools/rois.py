@@ -223,8 +223,6 @@ def find_rois(nifti, fnifti, thr):
     roi_dict = {}
     
     for i in xrange(num_features):
-        stdout.write("\rFinding roi: %d" % i)
-        stdout.flush()
 
         clusters = find_clusters(fnifti, i, thr)
         assert len(clusters) % 10 == 0
