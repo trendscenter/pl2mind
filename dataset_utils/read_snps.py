@@ -39,6 +39,8 @@ def parse_bim_line(line):
         Dictionary entry with SNP name as key.
     """
     elems = line.translate(None, "\n").split("\t")
+    if len(elems) == 1:
+        elems = line.translate(None, "\n").split(" ")
     try:
         assert len(elems) == 6
         chromosome = int(elems[0])
@@ -228,12 +230,20 @@ def convert_dat_to_haps(data, info_dict):
     keys = [k for k in info_dict.keys() if k != "ext"]
     data_idx = [info_dict[k]["line_number"] for k in keys]
     for j, SNP_name in enumerate(keys):
+        if SNP_name == "rsdummy":
+            continue
         i = 2 * data_idx[j]
+        assert i < data.shape[0], (i, data.shape[0])
         data_entry = data[i:i+2]
-        assert data_entry.shape[0] == 2, data_entry.shape
+        assert data_entry.shape[0] == 2,\
+            "data entry shape on SNP %s is %s (idx %d out of %d)" % (SNP_name, data_entry.shape, i, data.shape[0])
         value_entry = data_entry.sum(axis=0) - 2
         
+        assert SNP_name in new_haps_dict.keys(), SNP_name
         new_haps_dict[SNP_name]["values"] = value_entry
+        assert "minor" in new_haps_dict[SNP_name], SNP_name
+
+    new_haps_dict.pop("rsdummy", None)
 
     return new_haps_dict
 
@@ -356,6 +366,22 @@ def read_chr_directory(directory):
         snp_dict[ext] = parse_dict
 
     if "dat" in file_dict:
+        info_dict = snp_dict["info"]
+        bim_dict = snp_dict["bim"]
+        info_keys = [k for k in info_dict.keys() if k != "ext"]
+        bim_keys = [k for k in bim_dict.keys() if k != "ext"]
+        if len(set(info_keys) - set(bim_keys)) != 0:
+            logger.warning("Fixing info %d -> %d. This is a hack" % (len(info_keys), len(bim_keys)))
+            assert len(set(bim_keys) - set(info_keys)) == 1, set(bim_keys) - set(info_keys)
+            new_info = {"ext": "info"}
+            for k in bim_keys:
+                if k == "rsdummy":
+                    new_info[k] = bim_dict[k]
+                    continue
+                new_info[k] = info_dict[k]
+                new_info[k]["line_number"] = bim_dict[k]["line_number"]
+            snp_dict["info"] = new_info
+
         file_name = path.join(directory, file_dict["dat"])
         data = parse_dat_file(file_name)
         parse_dict = convert_dat_to_haps(data, snp_dict["info"])
@@ -372,6 +398,7 @@ def read_chr_directory(directory):
     if "haps" in snp_dict:
         assert "bim" in snp_dict
         for key in snp_dict["bim"]:
+            if key == "rsdummy": continue
             if key == "ext": continue
 
             minor, major = [(snp_dict["haps"][key])[m] for m in ["minor", "major"]]
