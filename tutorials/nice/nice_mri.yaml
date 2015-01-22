@@ -1,0 +1,163 @@
+# Example script showcasing how to use the non-linear ICA framework with MRI.
+!obj:pylearn2.train.Train {
+    dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.%(data_class)s {
+        which_set: "train",
+        center: &center False,
+        even_input: &ei True,
+        unit_normalize: &un True,
+        apply_mask: &app_mask True,
+        dataset_name: &ds_name %(dataset_name)s
+    },
+    model: !obj:nice.pylearn2.models.nice.NICE {
+        # Input dimensions (x's dimensionality)
+        nvis: &nvis %(nvis)i,
+        corruptor: !obj:pylearn2.neuroimaging_utils.datasets.MRI.GaussianMRICorruptor {
+            stdev: .01,
+            variance_map: !pkl: "%(variance_map_file)s"
+        },
+        # The encoder model is a MLP
+        encoder: !obj:nice.pylearn2.models.mlp.TriangularMLP {
+            layer_name: 'encoder',
+            layers: [
+                !obj:nice.pylearn2.models.mlp.CouplingLayer {
+                    split: &half_nvis %(half_nvis)i,
+                    coupling: !obj:pylearn2.models.mlp.MLP {
+                        layer_name: 'coupling_1',
+                        layers: [
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_1_h1',
+                                dim: &nhid 1000,
+                                irange: &irange .01,
+                            },
+                            !obj:pylearn2.models.mlp.Linear {
+                                layer_name: 'coupling_1_out',
+                                dim: *half_nvis,
+                                irange: *irange,
+                            },
+                        ],
+                    },
+                },
+                !obj:nice.pylearn2.models.mlp.CouplingLayer {
+                    split: *half_nvis,
+                    coupling: !obj:pylearn2.models.mlp.MLP {
+                        layer_name: 'coupling_2',
+                        layers: [
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_2_h1',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_2_h2',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_2_h3',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.Linear {
+                                layer_name: 'coupling_2_out',
+                                dim: *half_nvis,
+                                irange: *irange,
+                            },
+                        ],
+                    },
+                },
+                !obj:nice.pylearn2.models.mlp.CouplingLayer {
+                    split: *half_nvis,
+                    coupling: !obj:pylearn2.models.mlp.MLP {
+                        layer_name: 'coupling_3',
+                        layers: [
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_3_h1',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_3_h2',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_3_h3',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.Linear {
+                                layer_name: 'coupling_3_out',
+                                dim: *half_nvis,
+                                irange: *irange,
+                            },
+                        ],
+                    },
+                },
+                !obj:nice.pylearn2.models.mlp.CouplingLayer {
+                    split: *half_nvis,
+                    coupling: !obj:pylearn2.models.mlp.MLP {
+                        layer_name: 'coupling_4',
+                        layers: [
+                            !obj:pylearn2.models.mlp.RectifiedLinear {
+                                layer_name: 'coupling_4_h1',
+                                dim: *nhid,
+                                irange: *irange,
+                            },
+                            !obj:pylearn2.models.mlp.Linear {
+                                layer_name: 'coupling_4_out',
+                                dim: *half_nvis,
+                                irange: *irange,
+                            },
+                        ],
+                    },
+                },
+                !obj:nice.pylearn2.models.mlp.Homothety {
+                    layer_name: 'z',
+                },
+            ],
+        },
+        # The prior model is picked
+        prior: !obj:nice.pylearn2.models.nice.%(prior)s {},
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: 10,
+        learning_rate: 4e-4,
+        learning_rule: !obj:nice.pylearn2.training_algorithms.learning_rule.RMSPropMomentum {
+            init_momentum: 0.00,
+        },
+        monitoring_dataset: {
+            'train' : *data,
+            'valid': !obj:pylearn2.neuroimaging_utils.datasets.MRI.%(data_class)s {
+                which_set: "test",
+                center: *center,
+                even_input: *ei,
+                unit_normalize: *un,
+                apply_mask: *app_mask,
+                dataset_name: *ds_name
+                },
+        },
+        cost: !obj:nice.pylearn2.costs.log_likelihood.NegativeLogLikelihood {},
+        termination_criterion: !obj:pylearn2.termination_criteria.EpochCounter {
+            max_epochs: 1500,
+        },
+        update_callbacks: [
+            !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+                decay_factor: 1.0005,
+                min_lr:       1e-5,
+            },
+        ],
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+           channel_name: 'valid_objective',
+           save_path: "%(save_path)s_best.pkl",
+        },
+        !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+            final_momentum: .5,
+            start: 5,
+            saturate: 6,
+        },
+    ],
+    save_path: "%(save_path)s.pkl",
+    save_freq: 10,
+}
