@@ -14,8 +14,8 @@ import os
 from os import path
 import cPickle as pickle
 import psutil
-from pylearn2.neuroimaging_utils.tools import mri_analysis
-from pylearn2.neuroimaging_utils.tools.write_table import HTMLPage
+from pl2mind.tools import mri_analysis
+from pl2mind.tools.write_table import HTMLPage
 from pylearn2.utils import serial
 from sys import stdout
 import time
@@ -32,23 +32,23 @@ class JobDict(dict):
 
         self.in_queue = manager.list()
         running_process_in_queue = manager.list()
-        
+
         self.message_queue = mp.Queue()
         self.model_queue = mp.Queue()
-        self.running_results_queue = mp.Queue()        
+        self.running_results_queue = mp.Queue()
 
         message_process = mp.Process(target=message_worker,
                                      args=(args.table, message_queue, ))
         message_process.start()
-        
-        
+
+
         model_process = mp.Process(target=model_worker,
                                    args=(args, model_queue,
                                          message_queue, in_queue))
         model_process.start()
 
-        
-        
+
+
         running_process = mp.Process(target=running_model_results,
                                      args=(job_dict, table_dir,
                                            running_results_queue, running_process_in_queue,
@@ -73,7 +73,7 @@ class JobDict(dict):
             message_queue.put("Backup jobdict not found, creating from scratch")
 
         update_event.set()
-        
+
         update_process = mp.Process(target=table_trigger,
                                     args=(update_event, ))
         update_process.start()
@@ -169,7 +169,7 @@ def load_results_from_model(checkpoint, experiment_module, out_dir=None):
         raise IOError("Checkpoint %s not found" % checkpoint)
 
     if not hasattr(experiment_module, "extract_results"):
-        raise AttributeError("%s does not implement %s" % 
+        raise AttributeError("%s does not implement %s" %
                              (experiment_module,
                               "extract_results(<model>, <file_prefix>)"))
 
@@ -220,7 +220,7 @@ def table_worker(experiment_module, args,
     table_dir = serial.preprocess(path.join(args.out_dir, args.table))
     table_name = args.table
     html = HTMLPage(table_name + " results")
-    
+
     while True:
         db = sql.db("postgres://%(user)s@%(host)s:%(port)d/%(database)s?table=%(table)s"
                     % {"user": args.user,
@@ -229,7 +229,7 @@ def table_worker(experiment_module, args,
                        "database": args.database,
                        "table": args.table,
                        })
-    
+
         update_event.wait()
 
         old_jobdict = update_jobdict(job_dict, db, experiment_module, table_dir,
@@ -240,9 +240,9 @@ def table_worker(experiment_module, args,
                                 if not check_results_dir(
                 table_dir, job_dict[j_id]["file_prefix"])
                                 and job_dict[j_id]["status"] == 2]
-        
+
         new_finished_jobs = [j_id
-                             for j_id in job_dict.keys() 
+                             for j_id in job_dict.keys()
                              if (job_dict[j_id]["status"] == 2 and
                                  (j_id in old_jobdict and old_jobdict[j_id]["status"] == 1))]
 
@@ -284,7 +284,7 @@ def table_worker(experiment_module, args,
 
                 column_keys = list(column_keys)
                 column_keys.sort()
-            
+
                 if group == "results":
                     roi = results_of_interest
                 else:
@@ -295,7 +295,7 @@ def table_worker(experiment_module, args,
                                            % {"status": status, "group": group}),
                                  roi)
                 html.write(path.join(table_dir, "table.html"))
-                
+
         update_event.clear()
 
 def model_worker(args, model_queue, message_queue, in_queue):
@@ -365,7 +365,7 @@ def running_model_results(job_dict, table_dir, running_results_queue, running_pr
         running_process_in_queue.remove(job_id)
         time.sleep(5)
         q = running_results_queue.get()
-        
+
 def main(args):
     if not args.experiment:
         raise ValueError("Must include experiment source file")
@@ -477,7 +477,7 @@ def main(args):
         except Exception as e:
             print e
             pass
-            
+
     table_process.join()
     model_process.join()
 

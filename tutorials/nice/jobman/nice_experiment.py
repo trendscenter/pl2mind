@@ -5,7 +5,7 @@ from jobman.tools import flatten
 from os import path
 
 from pylearn2.config import yaml_parse
-from pylearn2.neuroimaging_utils.tools import mri_analysis
+from pl2mind.tools import mri_analysis
 from pylearn2.scripts.jobman.experiment import ydict
 
 import numpy as np
@@ -31,7 +31,7 @@ def default_hyperparams(input_dim=0):
             "N": 20
             },
         "encoder": {
-            "__builder__": "pylearn2.neuroimaging_utils.models.nice_mlp.Simple_TriangularMLP",
+            "__builder__": "pl2mind.models.nice_mlp.Simple_TriangularMLP",
             "layer_name": "encoder",
             "layer_depths": [2, 4, 4, 2],
             "nvis": input_dim,

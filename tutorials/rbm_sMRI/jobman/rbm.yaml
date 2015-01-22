@@ -2,7 +2,7 @@
 !obj:pylearn2.train.Train {
     # For this model, we use a special data interface specifically created for this task.
     # This is the standard MRI dataset class.
-    dataset: &train !obj:pylearn2.neuroimaging_utils.datasets.MRI.%(data_class)s {
+    dataset: &train !obj:pl2mind.datasets.MRI.%(data_class)s {
         which_set: "train",
         demean: &dm True,
         variance_normalize: &vn True,
@@ -53,7 +53,7 @@
         # We monitory on training and validation data.
         monitoring_dataset: {
             'train' : *train,
-            'valid': !obj:pylearn2.neuroimaging_utils.datasets.MRI.%(data_class)s {
+            'valid': !obj:pl2mind.datasets.MRI.%(data_class)s {
                 which_set: "test",
                 demean: *dm,
                 variance_normalize: *vn,

@@ -6,9 +6,9 @@ import logging
 import numpy as np
 from os import path
 
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Standard
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Transposed
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Big
+from pl2mind.datasets.MRI import MRI_Standard
+from pl2mind.datasets.MRI import MRI_Transposed
+from pl2mind.datasets.MRI import MRI_Big
 from pylearn2.utils import serial
 
 import sys
@@ -138,7 +138,7 @@ class TestMRI:
                     for s in range(samples):
                         assert tv_mem[s][i][j][k] == tv_big[s][i][j][k],\
                             "Topo views different at (%d,%d,%d,%d): (%.10f vs %.10f)"\
-                            %(s, i, j, k, 
+                            %(s, i, j, k,
                               tv_mem[s][i][j][k],
                               tv_big[s][i][j][k])
         dm_mem = mri_mem.get_design_matrix(tv_mem)

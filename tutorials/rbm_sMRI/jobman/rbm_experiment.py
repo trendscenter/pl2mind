@@ -7,7 +7,7 @@ from os import path
 import pylab as plt
 
 from pylearn2.config import yaml_parse
-from pylearn2.neuroimaging_utils.tools import mri_analysis
+from pl2mind.tools import mri_analysis
 from pylearn2.scripts.jobman.experiment import ydict
 
 import numpy as np

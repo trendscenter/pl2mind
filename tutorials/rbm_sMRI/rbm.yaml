@@ -3,7 +3,7 @@
     # For this model, we use a special data interface specifically created for this task.
     # In this case, we are training a read-only version of the data, to limit the amount
     # of memory used by loading all of the data onto memory.
-    dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_On_Memory {
+    dataset: &data !obj:pl2mind.datasets.MRI.MRI_On_Memory {
         which_set: "train",
         center: &center True,
         variance_normalize: &vn True,
@@ -54,7 +54,7 @@
                monitoring_dataset : 
                    {
                    'train' : *data,
-                   'test': !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_On_Memory {
+                   'test': !obj:pl2mind.datasets.MRI.MRI_On_Memory {
                            which_set: "test",
                             center: *center,
                             variance_normalize: *vn,

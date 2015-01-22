@@ -20,9 +20,9 @@ import numpy as np
 from os import path
 
 from pylearn2.config import yaml_parse
-from pylearn2.neuroimaging_utils.datasets import MRI
-from pylearn2.neuroimaging_utils.dataset_utils import mri_nifti
-from pylearn2.neuroimaging_utils.tutorials.nice.jobman import nice_experiment
+from pl2mind.datasets import MRI
+from pl2mind.dataset_utils import mri_nifti
+from pl2mind.tutorials.nice.jobman import nice_experiment
 from pylearn2.utils import serial
 
 

@@ -20,10 +20,10 @@ import numpy as np
 from os import path
 
 from pylearn2.config import yaml_parse
-from pylearn2.neuroimaging_utils.datasets import MRI
-from pylearn2.neuroimaging_utils.dataset_utils import mri_nifti
-from pylearn2.neuroimaging_utils.tools import jobman_generators as jg
-from pylearn2.neuroimaging_utils.tutorials.rbm_sMRI.jobman import rbm_experiment as experiment
+from pl2mind.datasets import MRI
+from pl2mind.dataset_utils import mri_nifti
+from pl2mind.tools import jobman_generators as jg
+from pl2mind.tutorials.rbm_sMRI.jobman import rbm_experiment as experiment
 from pylearn2.utils import serial
 
 

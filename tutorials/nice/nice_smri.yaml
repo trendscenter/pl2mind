@@ -1,6 +1,6 @@
 # Example script showcasing how to use the non-linear ICA framework.
 !obj:pylearn2.train.Train {
-    dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Standard {
+    dataset: &data !obj:pl2mind.datasets.MRI.MRI_Standard {
         which_set: "train",
         center: &center False,
         even_input: &ei False,
@@ -11,7 +11,7 @@
     model: !obj:nice.pylearn2.models.nice.NICE {
         # Input dimensions (x's dimensionality)
         nvis: &nvis %(nvis)i,
-        corruptor: !obj:pylearn2.neuroimaging_utils.datasets.MRI.GaussianMRICorruptor {
+        corruptor: !obj:pl2mind.datasets.MRI.GaussianMRICorruptor {
             stdev: .1,
             variance_map: !pkl: "%(variance_map_file)s"
         },
@@ -127,7 +127,7 @@
         },
         monitoring_dataset: {
             'train' : *data,
-            'valid': !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Standard {
+            'valid': !obj:pl2mind.datasets.MRI.MRI_Standard {
                 which_set: "test",
                 center: *center,
                 even_input: *ei,

@@ -23,7 +23,7 @@ from pylearn2.utils.rng import make_np_rng
 from theano import config
 from theano.compat.python2x import OrderedDict
 
-from pylearn2.neuroimaging_utils.research import randomize_snps
+from pl2mind.research import randomize_snps
 
 
 logging.basicConfig(format="[%(module)s:%(levelname)s]:%(message)s")

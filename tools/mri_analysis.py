@@ -16,15 +16,15 @@ from math import log
 from math import sqrt
 
 from pylearn2.config import yaml_parse
-from pylearn2.neuroimaging_utils.datasets import dataset_info
-from pylearn2.neuroimaging_utils.datasets import MRI as MRI_module
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Standard
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI_Transposed
-from pylearn2.neuroimaging_utils.tools import ols
-from pylearn2.neuroimaging_utils.tools import rois
-from pylearn2.neuroimaging_utils.tools import nifti_viewer
-from pylearn2.neuroimaging_utils.tools import simtb_viewer
+from pl2mind.datasets import dataset_info
+from pl2mind.datasets import MRI as MRI_module
+from pl2mind.datasets.MRI import MRI
+from pl2mind.datasets.MRI import MRI_Standard
+from pl2mind.datasets.MRI import MRI_Transposed
+from pl2mind.tools import ols
+from pl2mind.tools import rois
+from pl2mind.tools import nifti_viewer
+from pl2mind.tools import simtb_viewer
 from pylearn2.models.dbm import DBM
 from pylearn2.models.dbm.dbm import RBM
 from pylearn2.models.vae import VAE
@@ -78,7 +78,7 @@ def get_activations(model, dataset):
             for i, j in enumerate(range(num_features)):
                 z[i, j] = 2 * sigma[j]
             Z = sharedX(z)
-            activations = (model.encoder.inv_fprop(Z).eval() - mean_activations)            
+            activations = (model.encoder.inv_fprop(Z).eval() - mean_activations)
         else:
             X = sharedX(data)
             activations = model.encode(X).eval()
@@ -177,7 +177,7 @@ def get_aod_info(dataset, activations):
     targets_novels = np.zeros([targets.shape[0], 2])
     targets_novels[:, 0] = targets
     targets_novels[:, 1] = novels
-        
+
     target_ttests = []
     novel_ttests = []
     for i in xrange(activations.shape[1]):
@@ -194,7 +194,7 @@ def get_aod_info(dataset, activations):
 def set_experiment_info(model, dataset, feature_dict):
     logger.info("Finding experiment related analysis for model of type %r and dataset %s"
                 % (type(model), dataset.dataset_name))
-    activations = get_activations(model, dataset)    
+    activations = get_activations(model, dataset)
 
     if dataset.dataset_name in dataset_info.sz_datasets:
         ttests = get_sz_info(dataset, activations)
@@ -396,11 +396,11 @@ def resolve_dataset(model, dataset_root=None):
         dataset_yaml = dataset_yaml.replace("train", "full")
     if dataset_root is not None:
         dataset_yaml = dataset_yaml[:-2] + ", dataset_root: %s" % dataset_root + "}"
- 
+
     dataset = yaml_parse.load(dataset_yaml)
     return dataset
 
-def main(model_path, out_path, target_stat, zscore=False, 
+def main(model_path, out_path, target_stat, zscore=False,
          prefix=None, dataset_root=None):
     """
     Main function of module.
@@ -448,7 +448,7 @@ def main(model_path, out_path, target_stat, zscore=False,
     features = get_features(model, zscore, transposed_features,
                             dataset, feature_dict=feature_dict)
     set_experiment_info(model, dataset, feature_dict)
-    
+
 
     pdf_path = path.join(out_path, "montage.pdf")
     if dataset.dataset_name in dataset_info.simtb_datasets:
@@ -490,5 +490,5 @@ if __name__ == "__main__":
         out_path = args.out_dir
     if args.verbose:
         logger.setLevel(logging.DEBUG)
-    main(args.model_path, out_path, args.target_stat, args.zscore, args.prefix, 
+    main(args.model_path, out_path, args.target_stat, args.zscore, args.prefix,
          args.dataset_root)

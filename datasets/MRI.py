@@ -15,7 +15,7 @@ from pylearn2.datasets import control
 from pylearn2.datasets import Dataset
 from pylearn2.datasets import dense_design_matrix
 
-from pylearn2.neuroimaging_utils.datasets import dataset_info
+from pl2mind.datasets import dataset_info
 
 from pylearn2.space import CompositeSpace
 from pylearn2.utils import contains_nan
@@ -161,7 +161,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         ----------
         which_set: str
             train, test, or full.
-        
+
         """
         p = path.join(self.dataset_root, dataset_name + "/")
 
@@ -180,7 +180,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                 raise ValueError("dataset \'%s\' not supported." % which_set)
             data_path = p + "full_unshuffled.npy"
             label_path = p + "full_labels_unshuffled.npy"
-        
+
         data_path = serial.preprocess(data_path)
         label_path = serial.preprocess(label_path)
 
@@ -203,12 +203,12 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
     def get_mask(self, dataset_name):
         """
         Get mask for dataset.
-        
+
         Parameters
         ----------
         dataset_name: str
             Name of dataset.
-        
+
         Returns
         -------
         mask: array-like
@@ -247,7 +247,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         ----------
         mat: array-like
             Matrix to convert.
-         
+
         Returns
         -------
         weights_view: array-like
@@ -318,7 +318,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
 
     def get_nifti(self, topo_view):
         """
-        Process the nifti 
+        Process the nifti
 
         Parameters
         ----------
@@ -403,7 +403,7 @@ class MRI_Standard(MRI):
     """
     Class for MRI datasets with standard topological view.
     """
-    
+
     def __init__(self,
                  which_set,
                  even_input=False,
@@ -446,7 +446,7 @@ class MRI_Standard(MRI):
                 i, j, k = (ons[r][0] for r in range(3))
                 mask[i, j, k] = 0
                 assert (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 0
-            
+
         X = self.set_mri_topological_view(topo_view, mask=mask)
         if mask is not None:
             logger.info("Masked shape is %r" % (X.shape,))
@@ -454,7 +454,7 @@ class MRI_Standard(MRI):
         if even_input:
             assert X.shape[1] % 2 == 0
 
-        super(MRI_Standard, self).__init__(X=X, y=y)       
+        super(MRI_Standard, self).__init__(X=X, y=y)
 
     def set_mri_topological_view(self, topo_view, mask=None, axes=('b', 0, 1, 'c')):
         """
@@ -528,7 +528,7 @@ class MRI_Transposed(MRI):
         if which_set != "full":
             warnings.warn("Only full dataset appropriate for transpose, setting to full.")
             which_set = "full"
-        
+
         data_file, label_file = self.resolve_dataset(which_set, dataset_name)
 
         logger.info("Loading %s data from %s." % (which_set, dataset_name))
@@ -622,7 +622,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
             raise ValueError(
                 'Unrecognized which_set value "%s".' % (which_set,) +
                 '". Valid values are ["train","test"].')
-        
+
         self.__dict__.update(locals())
         del self.self
 
@@ -641,7 +641,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
             data_path = "".join(data_path.split(".")[0] + '_dummy.h5')
 
         data_path = serial.preprocess(data_path)
-        
+
         # Load the mask file and retrieve shape information.
         self.mask = None
         mask_path = serial.preprocess(p + "mask.npy")

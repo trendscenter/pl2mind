@@ -1,6 +1,6 @@
 !obj:pylearn2.train.Train {
     # MRI dataset.
-    dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Standard {
+    dataset: &data !obj:pl2mind.datasets.MRI.MRI_Standard {
         which_set: "train",
         center: &center False,
         variance_normalize: &vn False,
@@ -38,7 +38,7 @@
             {
             'train' : *data,
             # Model is tested using a test dataset.  
-            'test': !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Standard {
+            'test': !obj:pl2mind.datasets.MRI.MRI_Standard {
                            which_set: "test",
                            center: *center,
                            variance_normalize: *vn,

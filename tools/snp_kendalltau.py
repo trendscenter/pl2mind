@@ -10,7 +10,7 @@ import logging
 import multiprocessing as mp
 import numpy as np
 from os import path
-from pylearn2.neuroimaging_utils.dataset_utils import read_snps
+from pl2mind.dataset_utils import read_snps
 from scipy.stats import kendalltau
 from sys import stdout
 import time
@@ -39,7 +39,7 @@ def load_snp_names(snp_dir):
                            "chr%d_risk_n1000.controls.gen" % c) for c in range(1,22+1)]
     names = [read_snps.read_SNP_file(f, read_value="NAMES") for f in snp_files]
     names = [item for sublist in names for item in sublist]
-    return names    
+    return names
 
 def init(shared_arr_):
     global shared_arr
@@ -99,4 +99,3 @@ if __name__ == '__main__':
     parser = make_argument_parser()
     args = parser.parse_args()
     kendall_tau_snps(args.source_directory)
-    

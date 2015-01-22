@@ -1,6 +1,6 @@
 # Example script showcasing how to use the non-linear ICA framework.
 !obj:pylearn2.train.Train {
-    dataset: &data !obj:pylearn2.neuroimaging_utils.datasets.MRI.MRI_Transposed {
+    dataset: &data !obj:pl2mind.datasets.MRI.MRI_Transposed {
         dataset_name: &ds_name "smri",
         center: &center False,
         unit_normalize: &un False,

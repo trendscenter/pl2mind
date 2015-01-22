@@ -1,7 +1,7 @@
 
 import numpy as np
-from pylearn2.neuroimaging_utils.datasets import SNP
-from pylearn2.neuroimaging_utils.research import randomize_snps
+from pl2mind.datasets import SNP
+from pl2mind.research import randomize_snps
 
 def test_randomization(batch_size=5):
     rng = np.random.RandomState([2014,10,31])
@@ -20,4 +20,3 @@ def test_randomization(batch_size=5):
     for chrom_data in next_data[:-1]:
         for x in chrom_data.eval().flatten():
             assert x in [0, .5, 1], x
-
