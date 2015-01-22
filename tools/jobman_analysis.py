@@ -24,6 +24,80 @@ import time
 logging.basicConfig(format="[%(module)s:%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
+class JobDict(dict):
+    def __init__(self, args):
+        self.experiment_module = imp.load_source("module.name", args.experiment)
+        self.table_dir = serial.preprocess(path.join(args.out_dir, args.table))
+        self.manager = mp.Manager()
+
+        self.in_queue = manager.list()
+        running_process_in_queue = manager.list()
+        
+        self.message_queue = mp.Queue()
+        self.model_queue = mp.Queue()
+        self.running_results_queue = mp.Queue()        
+
+        message_process = mp.Process(target=message_worker,
+                                     args=(args.table, message_queue, ))
+        message_process.start()
+        
+        
+        model_process = mp.Process(target=model_worker,
+                                   args=(args, model_queue,
+                                         message_queue, in_queue))
+        model_process.start()
+
+        
+        
+        running_process = mp.Process(target=running_model_results,
+                                     args=(job_dict, table_dir,
+                                           running_results_queue, running_process_in_queue,
+                                           message_queue, experiment_module))
+        running_process.start()
+
+        update_event = mp.Event()
+        table_process = mp.Process(target=table_worker,
+                                   args=(experiment_module, args, job_dict,
+                                         update_event, message_queue,
+                                         model_queue, in_queue,
+                                         running_results_queue, running_process_in_queue))
+        table_process.start()
+
+        backup_jobdict_file = path.join(table_dir, "jobdict.pkl")
+        if path.isfile(backup_jobdict_file) and not args.reload:
+            message_queue.put("Loading backup jobdict")
+            old_job_dict = pickle.load(open(backup_jobdict_file, "rb"))
+            job_dict.update(old_job_dict)
+            message_queue.put("Loading complete")
+        else:
+            message_queue.put("Backup jobdict not found, creating from scratch")
+
+        update_event.set()
+        
+        update_process = mp.Process(target=table_trigger,
+                                    args=(update_event, ))
+        update_process.start()
+
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers()
+        subparsers.required = True
+
+        process_parser = subparsers.add_parser("process")
+        process_parser.set_defaults(which="process")
+        process_parser.add_argument("job_id", type=int)
+
+        show_parser = subparsers.add_parser("show")
+        show_parser.set_defaults(which="show")
+
+        quit_parser = subparsers.add_parser("quit")
+        quit_parser.set_defaults(which="quit")
+
+        kill_parser = subparsers.add_parser("kill")
+        kill_parser.set_defaults(which="kill")
+        kill_parser.add_argument("job_id", type=int)
+
+
+
 def update_jobdict(job_dict, db, experiment_module, table_dir,
                    running_results_queue, running_process_in_queue):
     """
@@ -233,10 +307,18 @@ def model_worker(args, model_queue, message_queue, in_queue):
         file_prefix = q
         #probably a better way to do this
         message_queue.put("Processing model %s" % file_prefix)
-        mri_analysis.main(file_prefix + ".pkl",
-                          table_dir,
-                          "",
-                          prefix=file_prefix.split("/")[-1])
+        try:
+            mri_analysis.main(file_prefix + "_best.pkl",
+                              table_dir,
+                              "",
+                              prefix=file_prefix.split("/")[-1])
+        except IOError:
+            mri_analysis.main(file_prefix + "_best.pkl",
+                              table_dir,
+                              "",
+                              prefix=file_prefix.split("/")[-1])
+        except IOError:
+            message_queue.put("Checkpoint for %s not found" % file_prefix)
         in_queue.remove(file_prefix)
         message_queue.put("Finished processing model %s" % file_prefix)
         time.sleep(5)
@@ -348,6 +430,10 @@ def main(args):
     quit_parser = subparsers.add_parser("quit")
     quit_parser.set_defaults(which="quit")
 
+    kill_parser = subparsers.add_parser("kill")
+    kill_parser.set_defaults(which="kill")
+    kill_parser.add_argument("job_id", type=int)
+
     while True:
         command = raw_input("%s: " % args.table)
         try:
@@ -372,6 +458,22 @@ def main(args):
                     message_queue.put("Models in process queue:\n %s" % "\n".join(in_queue))
                 else:
                     message_queue.put("Model %s already in queue." % prefix)
+            elif a.which == "kill":
+                job_id = a.job_id
+                now = time.time()
+                process = psutil.Process(job_dict[job_id]["pid"])
+                if process.is_running():
+                    process.kill()
+                    while process.is_running():
+                        if time.time() - now > 20:
+                            break
+                    if process.is_running():
+                        message_queue.put("Job not stopped after 20 secs")
+                    else:
+                        message_queue.put("Job %d killed" % job_id)
+                else:
+                    message_queue.put("No such job running.")
+
         except Exception as e:
             print e
             pass
