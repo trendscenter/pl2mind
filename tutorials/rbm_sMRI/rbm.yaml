@@ -3,9 +3,9 @@
     # For this model, we use a special data interface specifically created for this task.
     # In this case, we are training a read-only version of the data, to limit the amount
     # of memory used by loading all of the data onto memory.
-    dataset: &data !obj:pl2mind.datasets.MRI.MRI_On_Memory {
+    dataset: &data !obj:pl2mind.datasets.MRI.MRI_Standard {
         which_set: "train",
-        center: &center True,
+        demean: &dm True,
         variance_normalize: &vn True,
         apply_mask: &app_mask True,
         dataset_name: &ds_name "smri"
@@ -54,9 +54,9 @@
                monitoring_dataset : 
                    {
                    'train' : *data,
-                   'test': !obj:pl2mind.datasets.MRI.MRI_On_Memory {
+                   'test': !obj:pl2mind.datasets.MRI.MRI_Standard {
                            which_set: "test",
-                            center: *center,
+                            demean: *dm,
                             variance_normalize: *vn,
                             apply_mask: *app_mask,
                             dataset_name: *ds_name
@@ -75,7 +75,7 @@
            # We tell the RBM to train for x epochs
            termination_criterion: !obj:pylearn2.termination_criteria.EpochCounter { max_epochs: %(max_epochs)i },
         },
-    save_path: "%(save_path)s/rbm.pkl",
+    save_path: "%(save_path)s/rbm_smri.pkl",
     # This says to save it every epoch
     save_freq : 1
 }

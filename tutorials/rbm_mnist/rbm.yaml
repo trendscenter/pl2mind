@@ -103,7 +103,7 @@
                 saturate: 6
             },
     ],
-    save_path: "%(save_path)s/rbm.pkl",
+    save_path: "%(save_path)s/rbm_mnist.pkl",
     # This says to save it every epoch
     save_freq : 1
 }

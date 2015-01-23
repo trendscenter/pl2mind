@@ -2,6 +2,7 @@
 Module to train RBM on MNIST.
 """
 
+import os
 from os import path
 
 from pylearn2.config import yaml_parse
@@ -11,7 +12,7 @@ def train_yaml(yaml_file):
     train = yaml_parse.load(yaml_file)
     train.main_loop()
 
-def train(yaml_file, save_path):
+def train(yaml_file, save_path, epochs):
     yaml = open(yaml_file, "r").read()
     input_dim = 784 # MNIST input size
     hyperparams = {"nvis": input_dim,
@@ -19,16 +20,22 @@ def train(yaml_file, save_path):
                     "detector_layer_dim": 200,
                     "monitoring_batches": 10,
                     "train_stop": 50000,
-                    "max_epochs": 300,
+                    "max_epochs": epochs,
                     "save_path": save_path
                   }
     yaml = yaml % hyperparams
     train_yaml(yaml)
 
-def train_rbm():
+def train_rbm(epochs = 300, save_path=None):
     yaml_file = path.join(path.abspath(path.dirname(__file__)), "rbm.yaml")
-    save_path = path.abspath(path.dirname(__file__))
-    train(yaml_file, save_path)
+    if save_path is None:
+        save_path = path.abspath(path.dirname(__file__))
+    train(yaml_file, save_path, epochs)
 
 if __name__ == "__main__":
-    train_rbm()
+    save_path = path.join(serial.preprocess("${PYLEARN2_OUTS}"), "tutorials")
+    if not path.isdir(serial.preprocess("${PYLEARN2_OUTS}")):
+        raise IOError("PYLEARN2_OUTS environment variable not set")
+    if not path.isdir(save_path):
+        os.mkdir(save_path)
+    train_rbm(save_path)
