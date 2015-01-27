@@ -44,4 +44,4 @@ if __name__ == "__main__":
         raise IOError("PYLEARN2_OUTS environment variable not set")
     if not path.isdir(save_path):
         os.mkdir(save_path)
-    train_rbm(save_path)
+    train_rbm(save_path=save_path)
