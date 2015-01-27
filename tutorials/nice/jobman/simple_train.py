@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 yaml_file = nice_experiment.yaml_file
 
-def main(dataset_name="smri"):
+def main(args):
     logger.info("Getting dataset info for %s" % args.dataset_name)
     data_path = serial.preprocess("${PYLEARN2_NI_PATH}/" + args.dataset_name)
     mask_file = path.join(data_path, "mask.npy")
@@ -47,21 +47,6 @@ def main(dataset_name="smri"):
     yaml_template = open(yaml_file).read()
     hyperparams = expand(flatten(nice_experiment.default_hyperparams(input_dim=input_dim)),
                          dict_type=ydict)
-
-    for param in hyperparams:
-        if hasattr(args, param) and getattr(args, param):
-            val = getattr(args, param)
-            logger.info("Filling %s with %r" % (param, val))
-            hyperparams[param] = type(hyperparams[param])(val)
-        elif param == "weight_decay":
-            val = getattr(args, "l1_decay")
-            if val == 0.0:
-                hyperparams["weight_decay"] = ""
-            else:
-                hyperparams["weight_decay"] = {
-                    "__builder__": "pylearn2.costs.mlp.L1WeightDecay",
-                    "coeffs": {"z": val}
-                    }
 
     for param in file_params:
         yaml_template = yaml_template.replace("%%(%s)s" % param, file_params[param])

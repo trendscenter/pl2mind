@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def html_header(title):
     header_string = (
         "<html>\n"
-        "<head>\n"             
+        "<head>\n"
         "<link rel=\"stylesheet\" href=\"../html_css/blue/theme.blue.css\" type=\"text/css\" "
         "media=\"print, projection, screen\" />\n"
         "<link rel=\"stylesheet\" href=\"../html_css/popup_css/style.css\" type=\"text/css\">\n"
@@ -25,8 +25,7 @@ def html_header(title):
         "</script>\n"
         "<script src=\"../html_css/js/bootstrap.min.js\"></script>\n"
         "<script src=\"../html_css/tablesorter/js/widgets/widget-columnSelector.js\">"
-        "</script>\n" 
-        "<script src=\"../html_css/js/popup.js\"></script>\n"
+        "</script>\n"
         "<script src=\"../html_css/js/table_sorter.js\"></script>\n"
         "<title>%(title)s</title>\n"
         "</head>\n"
@@ -72,14 +71,14 @@ def html_elements():
 
     return elements_string
 
-def html_column_names(model_keys, results_keys, 
+def html_column_names(model_keys, results_keys,
                       non_priority_keys, priority_keys):
     column_name_string = "\n\t<th></th>"
     for k in model_keys:
         if k in non_priority_keys:
             column_name_string += "\n\t<th class=\"columnSelector-false\">%s\t\n</th>" % k.replace("_", " ")
         else:
-            column_name_string += "\n\t<th>%s\t\n</th>" % k.replace("_", " ") 
+            column_name_string += "\n\t<th>%s\t\n</th>" % k.replace("_", " ")
     for k in results_keys:
         if k in priority_keys:
             column_name_string += "\n\t<th>%s\t\n</th>" % k.replace("_", " ")
@@ -96,7 +95,7 @@ def html_rows(status, model_keys, results_keys, model_dict, results_dict):
             )
     elif status in [1, 2]:
         process_string = (
-            "\"python $PYLEARN2_DIR/neuroimaging_utils/tools/mri_analysis.py %s.pkl\"" 
+            "\"python $PYLEARN2_DIR/neuroimaging_utils/tools/mri_analysis.py %s.pkl\""
             % model_dict["file_prefix"])
         row_string += (
             "\n\t<td>"
@@ -106,7 +105,7 @@ def html_rows(status, model_keys, results_keys, model_dict, results_dict):
             "data-target=\"#showModal\" "
             "dir=\"%(path)s\" "
             "id=\"%(path)s\" "
-            "error_script=%(process_string)s>View</a></td>" 
+            "error_script=%(process_string)s>View</a></td>"
             % {"process_string": process_string,
                "path": model_dict["file_prefix"].split("/")[-1]
                })
@@ -152,10 +151,10 @@ class HTMLPage(object):
     def add_table(self, key, model_dicts, results_dicts, results_of_interest):
         assert len(model_dicts) == len(results_dicts)
         model_keys = sorted(list(
-                set(k for keys in [md.keys() 
+                set(k for keys in [md.keys()
                                    for md in model_dicts] for k in keys)))
         result_keys = sorted(list(
-                set(k for keys in [rd.keys() 
+                set(k for keys in [rd.keys()
                                    for rd in results_dicts] for k in keys)))
         repeated_value_keys = [k for k in model_keys
                                if all(md[k] == model_dicts[0][k] for md in model_dicts)]
@@ -189,7 +188,7 @@ class HTMLPage(object):
                          "</div>\n"
                          )
         self.table_strings.append(table_string)
-    
+
     def clear(self):
         self.table_strings = []
 

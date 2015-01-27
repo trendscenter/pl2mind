@@ -19,6 +19,7 @@ from pylearn2.config import yaml_parse
 from pl2mind.datasets import dataset_info
 from pl2mind.datasets import MRI as MRI_module
 from pl2mind.datasets.MRI import MRI
+from pylearn2.neuroimaging_utils.datasets.MRI import MRI as MRI_old
 from pl2mind.datasets.MRI import MRI_Standard
 from pl2mind.datasets.MRI import MRI_Transposed
 from pl2mind.tools import ols
@@ -228,7 +229,7 @@ def get_nifti(dataset, features, out_file=None):
     """
     logger.info("Getting nifti for dataset of type %r and %d features."
                 % (type(dataset), features.shape[0]))
-    if not isinstance(dataset, MRI):
+    if not isinstance(dataset, (MRI, MRI_old)):
         raise ValueError("Dataset type is %r and not an instance of %r" % (type(dataset), MRI))
     weights_view = dataset.get_weights_view(features)
     nifti = dataset.get_nifti(weights_view)
@@ -400,7 +401,7 @@ def resolve_dataset(model, dataset_root=None):
     dataset = yaml_parse.load(dataset_yaml)
     return dataset
 
-def main(model_path, out_path, target_stat, zscore=False,
+def main(model, out_path, target_stat="", zscore=False,
          prefix=None, dataset_root=None):
     """
     Main function of module.
@@ -408,26 +409,36 @@ def main(model_path, out_path, target_stat, zscore=False,
 
     Parameters
     ----------
-    model_path: str
-        Path for the model.
+    model_path: Pylearn2.Model or str
+        Model instance or path for the model.
     out_path: str
         Path for the output directory.
     args: dict
         argparse arguments (defined below).
     """
-    if prefix is None:
-        prefix = ".".join(path.basename(model_path).split(".")[:-1])
-    out_path = path.join(out_path, prefix)
-    if not path.isdir(out_path):
-        os.mkdir(out_path)
 
-    logger.info("Logger is set to %s" % logger.level)
     # This is a hack for loggers
     simtb_viewer.logger.level = logger.level
     MRI_module.logger.level = logger.level
-#    nifti_viewer.logger.level = logger.level
-    logger.info("Loading model from %s" % model_path)
-    model = serial.load(model_path)
+
+    if prefix is None and isinstance(model, str):
+        prefix = ".".join(path.basename(model_path).split(".")[:-1])
+        out_path = path.join(out_path)
+        montage_prefix = prefix
+        spectrum_prefix = prefix
+        nifti_prefix = prefix
+    else:
+        montage_prefix = "montage"
+        spectrum_prefix = "spectrum"
+        nifti_prefix = "image"
+
+    if isinstance(model, str):
+        logger.info("Loading model from %s" % model_path)
+        model = serial.load(model_path)
+
+    if not path.isdir(out_path):
+        os.mkdir(out_path)
+
     logger.info("Extracting dataset")
     dataset = resolve_dataset(model, dataset_root)
     if isinstance(dataset, MRI_Transposed):
@@ -438,7 +449,7 @@ def main(model_path, out_path, target_stat, zscore=False,
     feature_dict = {}
 
     if isinstance(model, NICE):
-        spectrum_path = path.join(out_path, "spectrum.pdf")
+        spectrum_path = path.join(out_path, spectrum_prefix + ".pdf")
         f = plt.figure()
         spectrum = nice_spectrum(model)
         plt.plot(spectrum)
@@ -450,14 +461,14 @@ def main(model_path, out_path, target_stat, zscore=False,
     set_experiment_info(model, dataset, feature_dict)
 
 
-    pdf_path = path.join(out_path, "montage.pdf")
+    pdf_path = path.join(out_path, montage_prefix + ".pdf")
     if dataset.dataset_name in dataset_info.simtb_datasets:
         save_simtb_montage(dataset, features, pdf_path,
                            feature_dict=feature_dict,
                            target_stat=target_stat,
                            target_value=2.)
     else:
-        nifti_path = path.join(out_path, prefix + ".nii")
+        nifti_path = path.join(out_path, nifti_prefix + ".nii")
         nifti = get_nifti(dataset, features, out_file=nifti_path)
         save_nii_montage(nifti, nifti_path,
                          pdf_path, feature_dict=feature_dict,
