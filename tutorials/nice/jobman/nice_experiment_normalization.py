@@ -35,7 +35,8 @@ def default_hyperparams(input_dim=0):
             "N": 20
             },
         "encoder": {
-            "__builder__": "pylearn2.neuroimaging_utils.models.nice_mlp.Simple_TriangularMLP",
+            "__builder__":
+                "pl2mind.models.nice_mlp.Simple_TriangularMLP",
             "layer_name": "encoder",
             "layer_depths": [2, 4, 4, 2],
             "nvis": input_dim,
@@ -75,9 +76,11 @@ results_of_interest = [
 
 plot_results = {
     "objective": ("train_objective", "valid_objective"),
-    "over_std": ("train_z_S_over_2_stdev", "valid_z_S_over_2_stdev", "train_z_S_over_1_stdev", "valid_z_S_over_1_stdev"),
+    "over_std": ("train_z_S_over_2_stdev", "valid_z_S_over_2_stdev",
+                 "train_z_S_over_1_stdev", "valid_z_S_over_1_stdev"),
     "cumulative_sum": ("train_cumulative_sum", "valid_cumulative_sum"),
-    "sigma_l1_penalty": ("train_term_1_sigma_l1_penalty", "valid_term_1_sigma_l1_penalty")
+    "sigma_l1_penalty": ("train_term_1_sigma_l1_penalty",
+                         "valid_term_1_sigma_l1_penalty")
 }
 
 def make_plots(model, out_dir):
@@ -102,17 +105,22 @@ def make_plots(model, out_dir):
 def extract_results(model):
     """
     Function to extract result dictionary from model.
-    Is called automatically by the experiment function or can be called externally.
+    Is called automatically by the experiment function
+    or can be called externally.
     """
 
     channels = model.monitor.channels
 
     best_index = np.argmin(channels["valid_objective"].val_record)
-    rd = dict((k + "_at_best", float(channels[k].val_record[best_index])) for k in channels.keys())
-    rd.update(dict((k + "_at_end", float(channels[k].val_record[-1])) for k in channels.keys()))
+    rd = dict((k + "_at_best", float(channels[k].val_record[best_index]))
+        for k in channels.keys())
+    rd.update(dict((k + "_at_end", float(channels[k].val_record[-1]))
+        for k in channels.keys()))
     rd.update(
-        training_epochs=int(model.monitor.channels["train_objective"].epoch_record[-1]),
-        training_batches=int(model.monitor.channels["train_objective"].batch_record[-1]),
+        training_epochs=int(
+            model.monitor.channels["train_objective"].epoch_record[-1]),
+        training_batches=int(
+            model.monitor.channels["train_objective"].batch_record[-1]),
         best_epoch=best_index,
         batch_num_at_best=model.monitor.channels["train_objective"].batch_record[best_index],
         )

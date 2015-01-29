@@ -14,11 +14,40 @@ from pl2mind.datasets import MRI
 from pl2mind.dataset_utils import mri_nifti
 from pylearn2.scripts.jobman.experiment import ydict
 from pylearn2.utils import serial
+from pylearn2 import monitor
 
-logging.basicConfig(format="[%(module)s:%(levelname)s]:%(message)s")
+#logging.basicConfig(format="[%(module)s:%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
 yaml_file = nice_experiment.yaml_file
+
+class LogHandler(object):
+    def __init__(self, out_dir):
+        self.__dict__.update(locals())
+        self.on = False
+        self.channels = []
+
+    def write(self, message):
+        if "Monitoring step" in message:
+            self.on = True
+
+        if not self.on:
+            return
+        if "Saving to" in message:
+            return
+
+        parsed = message.split(":")
+        channel = parsed[0].translate(None, "\t\n")
+        if channel == "Monitoring step":
+            return
+
+        value = float(parsed[1].translate(None, "\n "))
+
+        if not channel in self.channels:
+            self.channels.append(channel)
+            open(path.join(self.out_dir, channel + ".log"), "w").close()
+        with open(path.join(self.out_dir, channel + ".log"), "a") as f:
+            f.write("%.2f \n" % value)
 
 def main(args):
     logger.info("Getting dataset info for %s" % args.dataset_name)
@@ -52,13 +81,14 @@ def main(args):
         yaml_template = yaml_template.replace("%%(%s)s" % param, file_params[param])
 
     yaml = yaml_template % hyperparams
-    print yaml
 
     logger.info("Training")
     train = yaml_parse.load(yaml)
     train.main_loop()
 
 if __name__ == "__main__":
+    h = logging.StreamHandler(LogHandler("/na/homes/dhjelm/tmp/"))
+    monitor.log.addHandler(h)
     parser = nice_experiment.make_argument_parser()
     args = parser.parse_args()
     if args.verbose:

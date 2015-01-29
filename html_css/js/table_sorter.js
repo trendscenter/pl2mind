@@ -6,6 +6,7 @@ $(function() {
 	writeTable(groups[g], g)
     }
 });
+
 /*
 $(function() {
     for (var i = 0; i < 4; ++i) {

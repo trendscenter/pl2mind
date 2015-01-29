@@ -1,0 +1,99 @@
+# This file shows how to train a guassian-binary RBM on fMRI data with L1 regularization.
+!obj:pylearn2.train.Train {
+    # For this model, we use a special data interface specifically created for this task.
+    # This is the standard MRI dataset class.
+    dataset: &train !obj:pl2mind.datasets.MRI.%(data_class)s {
+        which_set: "train",
+        demean: &dm True,
+        variance_normalize: &vn True,
+        apply_mask: &app_mask True,
+        dataset_name: &ds_name %(dataset_name)s
+    },
+    model: !obj:pylearn2.models.dbm.RBM {
+        batch_size: %(batch_size)i,
+        # Number of Gibbs steps. Decrease the learning rate if you increase.
+        niter: %(niter)d,
+        # The visible layer of this RBM are linear variables with gaussian noise.
+        visible_layer: !obj:pylearn2.models.dbm.GaussianVisLayer {
+            nvis: %(nvis)i,
+        },
+        # An RBM is a DBM with one hidden layer, consisting of a binary vector.
+        hidden_layer:
+            !obj:pylearn2.models.dbm.BinaryVectorMaxPool {
+                # Every layer in the DBM must have a layer_name field.
+                layer_name: 'h',
+                # Pooling is a required parameter ATM. We will not use it, setting it to 1.
+                pool_size: 1,
+                # Number of hidden units
+                detector_layer_dim: %(nhid)i,
+                # We initialize the weights by drawing them from W_ij ~ U(-irange, irange)
+                irange: .01,
+                init_bias: 0.,
+                center: True
+            }
+    },
+    # We train the model using stochastic gradient descent.
+    # One benefit of using pylearn2 is that we can use the exact same piece of
+    # code to train a DBM as to train an MLP. The interface that SGD uses to get
+    # the gradient of the cost function from an MLP can also get the *approximate*
+    # gradient from a DBM.
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        # We initialize the learning rate and momentum here. Down below
+        # we can control the way they decay with various callbacks.
+        learning_rate: %(learning_rate)f,
+        batch_size: %(batch_size)d,
+        # Compute new model parameters using SGD + Momentum
+        learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
+            init_momentum: %(init_momentum)f,
+        },
+        # Pylearn2 needs these to resolve the iterator. Eventually these will be
+        # moved to the MRI dataset class.
+        train_iteration_mode: "even_shuffled_sequential",
+        monitor_iteration_mode: "even_sequential",
+        # We monitory on training and validation data.
+        monitoring_dataset: {
+            'train' : *train,
+            'valid': !obj:pl2mind.datasets.MRI.%(data_class)s {
+                which_set: "test",
+                demean: *dm,
+                variance_normalize: *vn,
+                apply_mask: *app_mask,
+                dataset_name: *ds_name
+            },
+        },
+        # The SumOfCosts allows us to add together a few terms to make a complicated
+        # cost function
+        cost : !obj:pylearn2.costs.cost.SumOfCosts {
+            costs: [
+                # The first term of our cost function is contrastive divergence.
+                !obj:pylearn2.costs.dbm.BaseCD {},
+                # Here we use a weight decay object. This is set outside with a __builder__.
+                %(weight_decay)s       
+            ],        
+        },
+        # Termination criterion. Set outside with __builder__.
+        termination_criterion: %(termination_criterion)s,
+        update_callbacks: [
+            !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+                decay_factor: %(decay_factor)f,
+                min_lr:       %(min_lr)f,
+            },
+        ],
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+           # We might want to save the best validation model in case of overfitting.
+           channel_name: 'valid_reconstruction_cost',
+           save_path: "%(out_path)s/model_best.pkl",
+        },
+        !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+            # Momentum is increased to final value from epoch 5 to 10.
+            final_momentum: %(final_momentum)f,
+            start: 5,
+            saturate: 10,
+        },
+    ],
+    save_path: "%(out_path)s/model.pkl",
+    # This says to save every 10 epochs
+    save_freq : 10
+}

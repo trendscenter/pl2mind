@@ -33,6 +33,34 @@
     width: 40%; /* respsonsive width */
 }
 
+.param_div {
+    display: inline-block;
+    vertical-align: top;
+    padding: 5px 50px;
+}
+
+.plot_group_div {
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: 10px 10px 10px 10px;
+    background-color: white;
+}
+
+.plot_content_div {
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    display: inline-block;
+    vertical-align: top;
+    margin: 10px 10px 10px 10px;
+}
+
+.plot_div {
+    height: 300px;
+    width: 600px;
+}
+
 .table_div {
     border: 2px solid #a1a1a1;
     padding: 5px 10px;
@@ -59,11 +87,8 @@
 }
 
 #title_div {
-    border: 2px solid #a1a1a1;
-    border-radius: 5px;
     padding: 5px 10px;
     margin: 10px 20px 10px 10px;
-    background-color: white;
     width: 1000px;
     overflow: auto;
 }

@@ -7,7 +7,7 @@ import copy
 import datetime
 import imp
 from jobman.tools import flatten
-from jobman import sql
+from jobman import api0
 import logging
 import multiprocessing as mp
 from multiprocessing.managers import BaseManager, SyncManager, NamespaceProxy
@@ -49,6 +49,11 @@ class CommandLine(mp.Process):
         show_parser.set_defaults(which="show")
         show_parser.add_argument("what", help="What to show")
 
+        set_parser = subparsers.add_parser("set")
+        set_parser.set_defaults(which="set")
+        set_parser.add_argument("what")
+        set_parser.add_argument("to_status")
+
         quit_parser = subparsers.add_parser("quit")
         quit_parser.set_defaults(which="quit")
 
@@ -65,6 +70,22 @@ class CommandLine(mp.Process):
                     self.alerter(None)
                     self.table.stop()
                     return
+                elif a.which == "set":
+                    what = a.what
+                    to_status = a.to_status
+                    if "," in what:
+                        jobs = [int(w) for w in what.split(",")]
+                    elif "-" in what:
+                        r = what.split("-")
+                        jobs = range(int(r[0]), int(r[1]) + 1)
+                    else:
+                        jobs = [int(what)]
+                    for j_id in jobs:
+                        job = self.table.db.get(j_id)
+                        self.alerter("Setting job %d to %d" % (j_id,
+                                                               int(to_status)))
+                        job["jobman.status"] = int(to_status)
+
                 elif a.which == "show":
                     what = a.what
                     try:
@@ -479,14 +500,14 @@ def main(args):
     logger.info("Loading module %s" % args.experiment)
     experiment = imp.load_source("module.name", args.experiment)
 
-    db = sql.db("postgres://%(user)s@%(host)s:"
-                "%(port)d/%(database)s?table=%(table)s"
-                % {"user": args.user,
-                   "host": args.host,
-                   "port": args.port,
-                   "database": args.database,
-                   "table": args.table,
-                   })
+    db = api0.open_db("postgres://%(user)s@%(host)s:"
+                      "%(port)d/%(database)s?table=%(table)s"
+                      % {"user": args.user,
+                         "host": args.host,
+                         "port": args.port,
+                         "database": args.database,
+                         "table": args.table,
+                         })
 
     alerter = Alerter(prompt=args.table)
     alerter.start()
