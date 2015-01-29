@@ -303,9 +303,15 @@ def run_experiment(experiment, **kwargs):
 
     ih = MRIInputHandler()
     input_dim, variance_map_file = ih.get_input_params(hyper_parameters)
-    if hyper_parameters["nvis"] == 0:
+    if hyper_parameters["nvis"] is None:
         hyper_parameters["nvis"] = input_dim
-    hyper_parameters["variance_map_file"] = variance_map_file
+
+    if "corruptor" in hyper_parameters.keys():
+        if "variance_map" in hyper_parameters["corruptor"].keys():
+            hyper_parameters["corruptor"]["variance_map"] =\
+            "!pkl: %s" % variance_map_file
+    else:
+        hyper_parameters["variance_map_file"] = variance_map_file
 
     pid = os.getpid()
     out_path = serial.preprocess(

@@ -9,10 +9,7 @@
         nvis : %(nvis)i,
         nhid : %(nhid)i,
         irange : 0.05,
-        corruptor: !obj:pl2mind.datasets.MRI.GaussianMRICorruptor {
-            stdev: %(gaussian_noise)f,
-            variance_map: !pkl: "%(variance_map_file)s"
-        },
+        corruptor: %(corruptor)s,
         act_enc: %(act_enc)s,
         act_dec: %(act_dec)s,
     },

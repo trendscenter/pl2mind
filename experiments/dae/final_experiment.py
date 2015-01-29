@@ -8,7 +8,7 @@ fileparams = {
 }
 
 default_hyperparams  = {
-    "nvis": 0,
+    "nvis": None,
     "dataset_name": "smri",
     "learning_rate": 0.0001,
     "min_lr": 0.00001,

@@ -1,4 +1,4 @@
-from pl2mind.experiments.dae.dae_experiment import *
+from pl2mind.experiments.dae.initial_experiment import *
 
 yaml_file = path.join(path.abspath(path.dirname(__file__)), "pretrain.yaml")
 # Name for your experiment
