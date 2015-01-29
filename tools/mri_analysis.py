@@ -409,7 +409,7 @@ def main(model, out_path, target_stat="", zscore=False,
 
     Parameters
     ----------
-    model_path: Pylearn2.Model or str
+    model: Pylearn2.Model or str
         Model instance or path for the model.
     out_path: str
         Path for the output directory.
@@ -422,7 +422,7 @@ def main(model, out_path, target_stat="", zscore=False,
     MRI_module.logger.level = logger.level
 
     if prefix is None and isinstance(model, str):
-        prefix = ".".join(path.basename(model_path).split(".")[:-1])
+        prefix = ".".join(path.basename(model).split(".")[:-1])
         out_path = path.join(out_path)
         montage_prefix = prefix
         spectrum_prefix = prefix
@@ -433,8 +433,8 @@ def main(model, out_path, target_stat="", zscore=False,
         nifti_prefix = "image"
 
     if isinstance(model, str):
-        logger.info("Loading model from %s" % model_path)
-        model = serial.load(model_path)
+        logger.info("Loading model from %s" % model)
+        model = serial.load(model)
 
     if not path.isdir(out_path):
         os.mkdir(out_path)
@@ -483,7 +483,7 @@ def make_argument_parser():
     """
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("model_path", help="Path for the model .pkl file.")
+    parser.add_argument("model", help="Path for the model .pkl file.")
     parser.add_argument("--out_dir", default=None, help="output path for the analysis files.")
     parser.add_argument("--prefix", default=None, help="Prefix for output files.")
     parser.add_argument("--zscore", action="store_true")
@@ -496,10 +496,10 @@ if __name__ == "__main__":
     parser = make_argument_parser()
     args = parser.parse_args()
     if args.out_dir is None:
-        out_path = path.abspath(path.dirname(args.model_path))
+        out_path = path.abspath(path.dirname(args.model))
     else:
         out_path = args.out_dir
     if args.verbose:
         logger.setLevel(logging.DEBUG)
-    main(args.model_path, out_path, args.target_stat, args.zscore, args.prefix,
+    main(args.model, out_path, args.target_stat, args.zscore, args.prefix,
          args.dataset_root)
