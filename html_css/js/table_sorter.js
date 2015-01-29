@@ -188,7 +188,7 @@ function checkDir(dirname) {
     $.ajax({
 	url: dirname,
 	type: "get",
-	async: false, 
+	async: false,
 	success: function(txt) {
             foldertxt = txt;
 	},
@@ -243,7 +243,7 @@ function parse_lines(source) {
 		      "rows": []};
     for (var r = 2; r < lines.length; ++r) {
 	var row = {}
-	for (var c = 0; c < column_names.length; ++c) {	
+	for (var c = 0; c < column_names.length; ++c) {
 	    row[column_names[c]] = lines[r][c];
 	}
 	table_data.rows.push(row);
@@ -282,8 +282,8 @@ function writeColumns(dict, head_tr) {
 
 function writeTable(group, popup_id) {
     var title = group;
-    var process_dict = parse_lines(group + "_process.txt");
-    var params_dict = parse_lines(group + "_params.txt");
+    var process_dict = parse_lines(group + "_stats.txt");
+    var params_dict = parse_lines(group + "_hyperparams.txt");
     var results_dict = parse_lines(group + "_results.txt");
 
     var body = document.getElementsByTagName("body")[0];
@@ -328,13 +328,18 @@ function writeTable(group, popup_id) {
 	    var tr = document.createElement("tr");
 	    var button_td = document.createElement("td");
 	    var a = document.createElement("a");
-	    a.className = "cd-popup-trigger dir_btn off";
+	    if (group == "failed") {
+		a.className = "cd-popup-trigger log_btn on";
+		a.setAttribute("link", "log_files/" + process_dict.rows[r]["id"] + "/stderr");
+	    } else {
+		a.className = "cd-popup-trigger dir_btn off";
+		a.setAttribute("dir", process_dict.rows[r]["file prefix"]);
+		a.id = process_dict.rows[r]["file prefix"];
+		a.setAttribute("error_script", "Results not found");
+	    }
 	    a.href = "#";
 	    a.setAttribute("data-toggle", "modal");
 	    a.setAttribute("data-target", "#showModal");
-	    a.setAttribute("dir", process_dict.rows[r]["file prefix"]);
-	    a.id = process_dict.rows[r]["file prefix"];
-	    a.setAttribute("error_script", "Results not found");
 	    a.innerHTML = "View";
 	    button_td.appendChild(a);
 	    tr.appendChild(button_td);
@@ -355,7 +360,7 @@ function writeTable(group, popup_id) {
 		    tr.appendChild(td);
 		}
 	    }
-	    
+
 	    table_body.appendChild(tr);
 	}
 	table.appendChild(table_body);
@@ -379,7 +384,7 @@ jQuery(document).ready(function($){
 	$.ajax({
 	    url: $(this).attr("link"),
 	    type: "get",
-	    async: false, 
+	    async: false,
 	    success: function(txt) {
 		log_txt = txt;
 	    },
@@ -406,7 +411,7 @@ jQuery(document).ready(function($){
 	    $(div).html("Results do not exist, process with: <br /><div align=\"center\"><h5>"
 			+ error_script + "</h5></div>");
 	    modal_body.appendChild(div);
-	} else if ($(".modal-dialog").hasClass("large")) { 
+	} else if ($(".modal-dialog").hasClass("large")) {
 	    $(".modal-dialog").removeClass("large");
 	}
 	for (i = 0; i < pdf_files.length; i++) {
@@ -422,7 +427,7 @@ jQuery(document).ready(function($){
 	}
 	$(".pdf_btn").on("click", function(){
 	    var pdf_file = $(this).attr("pdf");
-	    
+
 	    var modal = document.getElementById("pdfModal");
 	    var modal_dialog = modal.getElementsByClassName("modal-dialog")[0];
 	    var modal_content = modal_dialog.getElementsByClassName("modal-content")[0];
@@ -431,7 +436,7 @@ jQuery(document).ready(function($){
 	    modal_title.innerHTML = pdf_file.split("/").pop();
 	    var modal_body = modal_content.getElementsByClassName("modal-body")[0];
 	    var object_html = "<object data=\"" + pdf_file + "\" type=\"application/pdf\" width=\"100%\" height=\"100%\"></object>";
-	    modal_body.innerHTML = object_html; 
+	    modal_body.innerHTML = object_html;
 	});
     });
 });

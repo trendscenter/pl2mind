@@ -10,6 +10,7 @@ from jobman.tools import flatten
 from jobman import sql
 import logging
 import multiprocessing as mp
+from multiprocessing.managers import BaseManager, SyncManager, NamespaceProxy
 import os
 from os import path
 import cPickle as pickle
@@ -21,73 +22,32 @@ from sys import stdout
 import time
 
 
+experiment = None
+
 logging.basicConfig(format="[%(module)s:%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
-class JobDict(dict):
-    def __init__(self, args):
-        self.experiment_module = imp.load_source("module.name", args.experiment)
-        self.table_dir = serial.preprocess(path.join(args.out_dir, args.table))
-        self.manager = mp.Manager()
 
-        self.in_queue = manager.list()
-        running_process_in_queue = manager.list()
+class CommandLine(mp.Process):
+    """
+    Class process for command line.
+    """
+    def __init__(self, alerter, table):
+        self.__dict__.update(locals())
+        self.make_argument_parser()
 
-        self.message_queue = mp.Queue()
-        self.model_queue = mp.Queue()
-        self.running_results_queue = mp.Queue()
-
-        message_process = mp.Process(target=message_worker,
-                                     args=(args.table, message_queue, ))
-        message_process.start()
-
-
-        model_process = mp.Process(target=model_worker,
-                                   args=(args, model_queue,
-                                         message_queue, in_queue))
-        model_process.start()
-
-
-
-        running_process = mp.Process(target=running_model_results,
-                                     args=(job_dict, table_dir,
-                                           running_results_queue, running_process_in_queue,
-                                           message_queue, experiment_module))
-        running_process.start()
-
-        update_event = mp.Event()
-        table_process = mp.Process(target=table_worker,
-                                   args=(experiment_module, args, job_dict,
-                                         update_event, message_queue,
-                                         model_queue, in_queue,
-                                         running_results_queue, running_process_in_queue))
-        table_process.start()
-
-        backup_jobdict_file = path.join(table_dir, "jobdict.pkl")
-        if path.isfile(backup_jobdict_file) and not args.reload:
-            message_queue.put("Loading backup jobdict")
-            old_job_dict = pickle.load(open(backup_jobdict_file, "rb"))
-            job_dict.update(old_job_dict)
-            message_queue.put("Loading complete")
-        else:
-            message_queue.put("Backup jobdict not found, creating from scratch")
-
-        update_event.set()
-
-        update_process = mp.Process(target=table_trigger,
-                                    args=(update_event, ))
-        update_process.start()
-
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers()
+    def make_argument_parser(self):
+        self.parser = argparse.ArgumentParser()
+        subparsers = self.parser.add_subparsers()
         subparsers.required = True
 
-        process_parser = subparsers.add_parser("process")
-        process_parser.set_defaults(which="process")
-        process_parser.add_argument("job_id", type=int)
+        analyze_parser = subparsers.add_parser("analyze")
+        analyze_parser.set_defaults(which="analyze")
+        analyze_parser.add_argument("job_id", type=int)
 
         show_parser = subparsers.add_parser("show")
         show_parser.set_defaults(which="show")
+        show_parser.add_argument("what", help="What to show")
 
         quit_parser = subparsers.add_parser("quit")
         quit_parser.set_defaults(which="quit")
@@ -96,167 +56,347 @@ class JobDict(dict):
         kill_parser.set_defaults(which="kill")
         kill_parser.add_argument("job_id", type=int)
 
+    def run(self):
+        while True:
+            command = raw_input("%s: " % self.alerter.prompt)
+            try:
+                a = self.parser.parse_args(command.split())
+                if a.which == "quit":
+                    self.alerter(None)
+                    self.table.stop()
+                    return
+                elif a.which == "show":
+                    what = a.what
+                    try:
+                        job_id = int(what)
+                        if job_id in self.table.jobs.keys():
+                            print self.table[job_id]
+                        else:
+                            raise AttributeError("Job %d not found in table"
+                                             % job_id)
+                    except ValueError:
+                        if what == "table":
+                            print self.table
+                        elif what == "updater":
+                            print self.table.updater
+                        elif what == "analyzer":
+                            print self.table.analyzer
+                        elif what == "running":
+                            print [k for k in self.table.jobs.keys()
+                                   if (self.table.jobs[k].stats.get(
+                                    "status", None) == 1)]
+                        else:
+                            raise ValueError("Cannot show object %s" % what)
+
+                elif a.which == "analyze":
+                    job_id = a.job_id
+                    if not job_id in self.table:
+                        self.alert_queue.put("Job id %d not found." % job_id)
+                    else:
+                        p = self.table.analyzer.put(prefix)
+                        if p:
+                            self.alerter(self.table.analyzer)
+                        else:
+                            self.alerter("Model %s already in queue." % prefix)
+                elif a.which == "kill":
+                    job_id = a.job_id
+                    if not job_id in self.table:
+                        self.alerter("Job id %d not found." % job_id)
+                    else:
+                        self.table[job_id].kill()
+
+            except Exception as e:
+                print e
+                pass
+
+        self.alerter.join()
 
 
-def update_jobdict(job_dict, db, experiment_module, table_dir,
-                   running_results_queue, running_process_in_queue):
+class Alerter(mp.Process):
     """
-    Updates the job dict with the database.
+    Class for sending alerts to stdout.
     """
+    def __init__(self, prompt="$"):
+        self.__dict__.update(locals())
+        self.alert_queue = mp.Queue()
+        self.verbose = False
+        super(Alerter, self).__init__()
 
-    if not hasattr(experiment_module, "default_hyperparams"):
-        raise AttributeError("%s does not implement %s"
-                         % (experiment_module, "default_hyperparams()"))
+    def run(self):
+        while True:
+            message = self.alert_queue.get()
+            if message is None:
+                stdout.write("Quitting....\n")
+                stdout.flush()
+                return
 
-    hyper_params = experiment_module.default_hyperparams()
-    model_keys = flatten(hyper_params).keys()
+            stdout.write("\r<alert>: %s\n" % message)
+            stdout.write("%s: " % self.prompt)
+            stdout.flush()
 
-    old_jobdict = copy.deepcopy(job_dict)
+    def __call__(self, message):
+        self.alert_queue.put(message)
 
-    for job in db.__iter__():
-        if not job.id in job_dict.keys():
-            params = get_param_dict(job, model_keys)
-            process = get_process_dict(job)
-            d = {}
-            d["params"] = params
-            d.update(process)
-            d["results"] = {}
-            job_dict[job.id] = d
+
+class Updater(mp.Process):
+    """
+    Class for updating job information.
+    """
+    def __init__(self, manager, alerter, jobs, db, analyze=False):
+        self.__dict__.update(locals())
+        self.queue = mp.Queue()
+        self.in_queue = manager.list()
+        super(Updater, self).__init__()
+
+    def run(self):
+        self.alerter("Starting updater")
+        while True:
+            job_id = self.queue.get()
+            job = self.jobs[job_id]
+            if job is None:
+                self.alerter("Stopping updater")
+                return
+            assert isinstance(job, Job)
+            assert job.job_id in self.in_queue
+            job = update(job, self.db, self.analyze)
+            self.jobs[job_id] = job
+            self.in_queue.remove(job.job_id)
+
+    def put(self, job_id):
+        if not job_id in self.in_queue:
+            self.in_queue.append(job_id)
+            self.queue.put(job_id)
+            return 1
+        return None
+
+    def __str__(self):
+        return "Update queue: %r" % list(self.in_queue)
+
+
+class Analyzer(mp.Process):
+    """
+    Class for analyzing job results.
+    """
+    def __init__(self, manager, alerter, jobs, db):
+        self.__dict__.update(locals())
+        self.queue = mp.Queue()
+        self.in_queue = manager.list()
+        super(Analyzer, self).__init__()
+
+    def run(self):
+        self.alerter("Starting analyzer")
+        while True:
+            job_id = self.queue.get()
+            job = self.jobs[job_id]
+            if job is None:
+                self.alerter("Quitting analyzer")
+                return
+            assert isinstance(job, Job)
+            assert job.job_id in self.in_queue
+            model = job.get_checkpoint()
+            analyze_model(job, model)
+            self.in_queue.remove(job.job_id)
+
+    def put(self, job_id):
+        if not job_id in self.in_queue:
+            self.in_queue.append(job_id)
+            self.queue.put(job_id)
+            return 1
+        return None
+
+    def __str__(self):
+        return "Update queue: %r" % list(self.in_queue)
+
+
+class JobManager(SyncManager): pass
+
+
+class JobProxy(NamespaceProxy):
+    _exposed_ = ("job_id", "stats", "hyperparams",
+                 "results", "__getattribute__", "__setattr__")
+
+
+def set_hyperparams(job, db):
+    dbjob = db.get(job.job_id)
+    job.file_prefix = dbjob["file_parameters.save_path"]
+    job.out_dir = path.join(job.table_dir,
+                             job.file_prefix.split("/")[-1])
+    hyperparams = experiment.default_hyperparams()
+    model_keys = flatten(hyperparams).keys()
+    job.hyperparams = dict(
+        (" ".join(k.replace(".__builder__", "").split(".")),
+         dbjob.get("hyper_parameters." + k, None))
+        for k in model_keys)
+
+def update(job, db, analyze=False):
+    dbjob = db.get(job.job_id)
+    job = update_stats(job, dbjob)
+    if job.stats["status"] in [0, 3, 4, 5]:
+        return job
+    elif job.pid is not None and job.stats["status"] == 1 and job.is_running():
+        model = job.get_checkpoint()
+        job.update_results_from_checkpoint(model)
+        job.make_plots(model)
+    elif job.pid is not None and job.stats["status"] != 1 and job.is_running():
+        job.kill()
+        job = update_results_from_db(job, dbjob)
+    else:
+        job = update_results_from_db(job, dbjob)
+
+    if job.stats["status"] == 2 and analyze:
+        if path.isfile(path.join(job.out_dir, "info.txt")):
+            with open(path.join(job.out_dir, "info.txt"), "r") as f:
+                lines = f.readlines()
+                if len(lines) == 2:
+                    status = int(lines[1])
+                else:
+                    status = 0
+                if status != 2:
+                    model = job.get_checkpoint()
+                    job.analyze_model(model)
+                    job.make_plots(model)
         else:
-            process = get_process_dict(job)
-            j = job_dict[job.id]
-            j.update(process)
-            job_dict[job.id] = j
+            model = job.get_checkpoint()
+            job.analyze_model(model)
+            job.make_plots(model)
 
-        if job.status == 1:
-            running_results_queue.put(job.id)
-            running_process_in_queue.append(job.id)
-        elif job.status == 2:
-            plot_results = [k + ".pdf" for k in experiment_module.plot_results.keys()]
-            all_there = True
-            file_prefix = job_dict[job.id]["file_prefix"]
-            for plot_result in plot_results:
-                if not path.isfile(path.join(table_dir, file_prefix, plot_result)):
-                    all_there = False
-                    break
-            if all_there:
-                j = job_dict[job.id]
-                results_keys = [k.split(".")[-1] for k in job.keys() if "results." in k]
-                j["results"].update(dict((k, job["results." + k]) for k in results_keys))
-                job_dict[job.id] = j
-            else:
-                running_results_queue.put(job.id)
-                running_process_in_queue.append(job.id)
+    return job
 
-    return old_jobdict
+def update_stats(job, dbjob):
+    job.pid = dbjob.get("pid", None)
+    job.stats.update(id=dbjob.id,
+                     status=dbjob.status,
+                     priority=dbjob.priority,
+                     pid=job.pid,
+                     host = dbjob.get("jobman.sql.host_name", None))
+    if job.pid is not None and job.is_running():
+        p = psutil.Process(job.pid)
+        job.stats.update(cpu = p.get_cpu_percent(),
+                         mem = p.get_memory_percent(),
+                         user = p.username)
 
-def get_param_dict(job, model_keys):
+    return job
+
+
+def update_results_from_db(job, dbjob):
+    result_keys = [k.split(".")[-1] for k in dbjob.keys()
+                   if "results." in k]
+    job.results.update(dict((k, dbjob["results." + k])
+        for k in result_keys))
+
+    return job
+
+
+class Job(object):
     """
-    Get model parameters + hyperparams as dictionary.
-    """
-
-    params = dict((" ".join(k.replace(".__builder__", "").split(".")),
-                   job.get("hyper_parameters." + k, None))
-                  for k in model_keys)
-
-    return params
-
-def load_results_from_model(checkpoint, experiment_module, out_dir=None):
-    results_dict = {}
-    try:
-        model = serial.load(checkpoint)
-    except IOError:
-        raise IOError("Checkpoint %s not found" % checkpoint)
-
-    if not hasattr(experiment_module, "extract_results"):
-        raise AttributeError("%s does not implement %s" %
-                             (experiment_module,
-                              "extract_results(<model>, <file_prefix>)"))
-
-    results = experiment_module.extract_results(model, out_dir)
-    return results
-
-def get_process_dict(job):
-    """
-    Loads running and other miscellaneous data into a dict.
+    Single job class.
     """
 
-    md_dict = {"status": job.status,
-               "id": job.id,
-               "file_prefix": job["file_parameters.save_path"]}
+    def __init__(self,
+                 job_id,
+                 table_dir,
+                 e=None):
 
-    if job.status == 0:
-        return md_dict
-    try:
-        md_dict["host"] = job["jobman.sql.host_name"]
-#        md_dict["run_time"] = job["jobman.run_time"]
-        md_dict["start_time"] = job["jobman.start_time"]
-#        md_dict["stop_time"] = job["jobman.stop_time"]
-        md_dict["priority"] = job["jobman.sql.priority"]
-        md_dict["pid"] = job["pid"]
-    except KeyError as e:
-        pass
+        if e is not None:
+            logger.warning("Setting experiment in constructor should only be "
+                           "done in debugging.")
+            global experiment
+            experiment = e
 
-    try:
-        p = psutil.Process(md_dict["pid"])
-        md_dict["cpu"] = p.get_cpu_percent()
-        md_dict["mem"] = p.get_memory_percent()
-        md_dict["user"] = p.username
-    except:
-        pass
+        self.__dict__.update(locals())
+        if experiment is None:
+            raise ValueError("Experiment has not been loaded yet.\n"
+                             "Please load using `imp` before loading jobs.")
 
-    return md_dict
+        self.stats = {}
+        self.results = {}
 
-def check_results_dir(table_dir, file_prefix):
-    return path.isdir(path.join(table_dir, file_prefix.split("/")[-1]))
+    def update_results_from_checkpoint(self, model):
+        self.results = experiment.extract_results(model)
 
-def table_worker(experiment_module, args,
-                 job_dict, update_event,
-                 message_queue, model_queue,
-                 in_queue, running_results_queue, running_process_in_queue):
+    def get_checkpoint(self):
+        try:
+            checkpoint = self.file_prefix + ".pkl"
+            model = serial.load(checkpoint)
+        except IOError:
+            checkpoint = self.file_prefix + "_best.pkl"
+            model = serial.load(checkpoint)
+        except IOError:
+            return None
 
-    assert isinstance(args, argparse.Namespace), type(args)
-    results_of_interest = experiment_module.results_of_interest
-    table_dir = serial.preprocess(path.join(args.out_dir, args.table))
-    table_name = args.table
-    html = HTMLPage(table_name + " results")
+        return model
 
-    while True:
-        db = sql.db("postgres://%(user)s@%(host)s:%(port)d/%(database)s?table=%(table)s"
-                    % {"user": args.user,
-                       "host": args.host,
-                       "port": args.port,
-                       "database": args.database,
-                       "table": args.table,
-                       })
+    def make_plots(self, model):
+        experiment.make_plots(model, self.out_dir)
 
-        update_event.wait()
+    def analyze_model(self, model):
+        experiment.analysis_fn(model, self.out_dir)
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(path.join(self.out_dir, "info.txt"), "w") as f:
+            f.write(now + "\n")
+            f.write(self.stats["status"])
 
-        old_jobdict = update_jobdict(job_dict, db, experiment_module, table_dir,
-                                     running_results_queue, running_process_in_queue)
+    def is_running(self):
+        try:
+            p = psutil.Process(self.pid)
+        except psutil.NoSuchProcess:
+            return False
+        return p.is_running()
 
-        unprocessed_finished = [j_id
-                                for j_id in job_dict.keys()
-                                if not check_results_dir(
-                table_dir, job_dict[j_id]["file_prefix"])
-                                and job_dict[j_id]["status"] == 2]
+    def kill(self):
+        p = psutil.Process(self.pid)
+        if p.is_running():
+            p.kill()
 
-        new_finished_jobs = [j_id
-                             for j_id in job_dict.keys()
-                             if (job_dict[j_id]["status"] == 2 and
-                                 (j_id in old_jobdict and old_jobdict[j_id]["status"] == 1))]
+    def clean_files(self):
+        os.remove(self.file_prefix + "_best.pkl")
+        os.remove(self.file_prefix + ".pkl")
 
-        for job_id in unprocessed_finished + new_finished_jobs:
-            prefix = job_dict[job_id]["file_prefix"]
-            if not prefix in in_queue:
-                message_queue.put("Adding job %d to processing queue (%s)" % (job_id, prefix))
-                in_queue.append(prefix)
-                model_queue.put(prefix)
+    def __repr__(self):
+        return ("%r(at %r)(job_id=%d, hyperparams=%r, stats=%r, results=%r)"
+                % (self.__class__,
+                   hex(id(self)),
+                   self.job_id,
+                   self.hyperparams,
+                   self.stats,
+                   self.results))
 
-        backup_jobdict_file = path.join(table_dir, "jobdict.pkl")
-        pickle.dump(dict(job_dict), open(backup_jobdict_file, "wb"))
+    def __str__(self):
+        return self.__repr__()
 
-        html.clear()
+
+class Table(object):
+    def __init__(self, jobs, db, name, updater, analyzer, alerter, reload=False):
+        self.__dict__.update(locals())
+
+        self.table_dir = serial.preprocess(path.join(args.out_dir,
+                                                     self.name))
+        self.html = HTMLPage(self.name + " results")
+
+        self.analyzer.start()
+        self.updater.start()
+
+    def stop(self):
+        self.analyzer.terminate()
+        self.updater.terminate()
+
+    def save(self):
+        bk_table = path.join(self.table_dir, "table.bk.pkl")
+        pickle.dump(dict(self.__dict__), open(bk_table, "wb"))
+
+    def reload(self):
+        backup_table_file = path.join(self.table_dir, "table.bk.pkl")
+        if path.isfile(backup_table_file):
+            with open(backup_table_file, "rb") as f:
+                bk_table = pickle.load(f)
+                self.__dict__.update(bk_table.__dict__)
+
+    def get(self, key, default=None):
+        return self.jobs.get(key, default)
+
+    def write_html(self):
+        self.html.clear()
+        results_of_interest = experiment.results_of_interest
 
         status_dict = {
             "waiting": [0],
@@ -266,21 +406,23 @@ def table_worker(experiment_module, args,
             }
 
         for status in ["waiting", "running", "done", "failed"]:
-            row_keys = [k for k in job_dict.keys() if job_dict[k]["status"] in status_dict[status]]
+            row_keys = [k for k in self.jobs.keys()
+                        if self.jobs[k].stats.get("status", 0)
+                        in status_dict[status]]
             row_keys.sort()
 
-            for group in ["process", "params", "results"]:
+            for group in ["stats", "hyperparams", "results"]:
                 table_dict = {}
                 column_keys = set()
                 for job_id in row_keys:
-                    if group == "process":
-                        # Bit of a hack to get here. REDO
-                        table_dict[job_id] = dict((k, job_dict[job_id][k]) for k in job_dict[job_id].keys()
-                                                      if k not in ["params", "results"])
-                        table_dict[job_id]["file_prefix"] = table_dict[job_id]["file_prefix"].split("/")[-1]
-                    else:
-                        table_dict[job_id] = job_dict[job_id][group]
-                    column_keys = column_keys.union(set(table_dict[job_id].keys()))
+                    job = self.jobs[job_id]
+                    table_dict[job_id] = getattr(job, group)
+                    column_keys = column_keys.union(
+                        set(table_dict[job_id].keys()))
+                    if group == "stats":
+                        table_dict[job_id]["file_prefix"] =\
+                        job.file_prefix.split("/")[-1]
+                        column_keys.add("file_prefix")
 
                 column_keys = list(column_keys)
                 column_keys.sort()
@@ -290,196 +432,84 @@ def table_worker(experiment_module, args,
                 else:
                     roi = column_keys
 
-                html.write_table(table_dict, row_keys, column_keys,
+                self.html.write_table(table_dict, row_keys, column_keys,
                                  path.join(table_dir, "%(status)s_%(group)s.txt"
                                            % {"status": status, "group": group}),
                                  roi)
-                html.write(path.join(table_dir, "table.html"))
+                self.html.write(path.join(self.table_dir, "table.html"))
 
-        update_event.clear()
+    def __getitem__(self, key):
+        return self.jobs[key]
 
-def model_worker(args, model_queue, message_queue, in_queue):
-    mri_analysis.logger.level = 40
-    table_dir = serial.preprocess(path.join(args.out_dir, args.table))
-    message_queue.put("Model worker ready.")
-    q = model_queue.get()
-    while q:
-        file_prefix = q
-        #probably a better way to do this
-        message_queue.put("Processing model %s" % file_prefix)
-        try:
-            mri_analysis.main(file_prefix + "_best.pkl",
-                              table_dir,
-                              "",
-                              prefix=file_prefix.split("/")[-1])
-        except IOError:
-            mri_analysis.main(file_prefix + "_best.pkl",
-                              table_dir,
-                              "",
-                              prefix=file_prefix.split("/")[-1])
-        except IOError:
-            message_queue.put("Checkpoint for %s not found" % file_prefix)
-        in_queue.remove(file_prefix)
-        message_queue.put("Finished processing model %s" % file_prefix)
-        time.sleep(5)
-        q = model_queue.get()
+    def __repr__(self):
+        return ("%r(table_name=%r, jobs=%r)" %
+                (self.__class__,
+                self.name,
+                dict(self.jobs)))
 
-def message_worker(prompt, message_queue):
+    def __str__(self):
+        return self.__repr__()
+
+def auto_update(table, secs=30):
+    table.alerter("Starting automatic updates")
+    table.updater.analyze = False
     while True:
-        message = message_queue.get()
-        if message == "quit":
-            stdout.write("Quitting....\n")
-            return
+        table.alerter("Updating table")
+        for db_job in table.db.__iter__():
+            job_id = db_job.id
+            job = table.jobs.get(job_id, None)
+            if job is not None:
+                table.updater.put(job_id)
+            else:
+                job = Job(job_id, table.table_dir)
+                #job = manager.job(job_id, table_dir)
+                set_hyperparams(job, table.db)
+                table.jobs[job_id] = job
+                table.updater.put(job_id)
 
-        stdout.write("\r<alert>: %s\n" % message)
-        stdout.write("%s: " % prompt)
-        stdout.flush()
-
-def table_trigger(update_event, secs=30):
-    while True:
-        update_event.set()
+        table.write_html()
         time.sleep(secs)
 
-def running_model_results(job_dict, table_dir, running_results_queue, running_process_in_queue, message_queue, experiment_module):
-    q = running_results_queue.get()
-    while True:
-        job_id = q
-        file_prefix = job_dict[job_id]["file_prefix"]
-        message_queue.put("Getting results for running model: %s" % file_prefix)
-        job = job_dict[job_id]
-        job_results = job["results"]
-        out_dir = path.join(table_dir, file_prefix.split("/")[-1])
-        try:
-            checkpoint = job_dict[job_id]["file_prefix"] + ".pkl"
-            results = load_results_from_model(checkpoint, experiment_module, out_dir)
-            job_results.update(results)
-            job_dict[job_id] = job
-            message_queue.put("Finished results for running model: %s" % file_prefix)
-        except IOError:
-            checkpoint = job_dict[job_id]["file_prefix"] + "_best.pkl"
-            results = load_results_from_model(checkpoint, experiment_module, out_dir)
-            job["results"] = results
-            message_queue.put("Finished results for running model: %s best()" % file_prefix)
-        except IOError:
-            message_queue.put("Model %s not found" % file_prefix)
-        running_process_in_queue.remove(job_id)
-        time.sleep(5)
-        q = running_results_queue.get()
+JobManager.register("job", Job, JobProxy)
 
 def main(args):
     if not args.experiment:
         raise ValueError("Must include experiment source file")
+    global experiment
     logger.info("Loading module %s" % args.experiment)
-    experiment_module = imp.load_source("module.name", args.experiment)
-    table_dir = serial.preprocess(path.join(args.out_dir, args.table))
+    experiment = imp.load_source("module.name", args.experiment)
 
-    manager = mp.Manager()
-    job_dict = manager.dict()
-    in_queue = manager.list()
+    db = sql.db("postgres://%(user)s@%(host)s:"
+                "%(port)d/%(database)s?table=%(table)s"
+                % {"user": args.user,
+                   "host": args.host,
+                   "port": args.port,
+                   "database": args.database,
+                   "table": args.table,
+                   })
 
-    message_queue = mp.Queue()
-    message_process = mp.Process(target=message_worker,
-                                 args=(args.table, message_queue, ))
-    message_process.start()
+    alerter = Alerter(prompt=args.table)
+    alerter.start()
 
-    model_queue = mp.Queue()
-    model_process = mp.Process(target=model_worker,
-                               args=(args, model_queue,
-                                     message_queue, in_queue))
-    model_process.start()
+    manager = JobManager()
+    manager.start()
 
-    running_results_queue = mp.Queue()
-    running_process_in_queue = manager.list()
-    running_process = mp.Process(target=running_model_results,
-                                 args=(job_dict, table_dir, running_results_queue, running_process_in_queue,
-                                       message_queue, experiment_module))
-    running_process.start()
+    jobs = manager.dict()
 
-    update_event = mp.Event()
-    table_process = mp.Process(target=table_worker,
-                               args=(experiment_module, args, job_dict, update_event, message_queue,
-                                     model_queue, in_queue, running_results_queue, running_process_in_queue))
-    table_process.start()
+    updater = Updater(manager, alerter, jobs, db)
+    analyzer = Analyzer(manager, alerter, jobs, db)
 
-    backup_jobdict_file = path.join(table_dir, "jobdict.pkl")
-    if path.isfile(backup_jobdict_file) and not args.reload:
-        message_queue.put("Loading backup jobdict")
-        old_job_dict = pickle.load(open(backup_jobdict_file, "rb"))
-        job_dict.update(old_job_dict)
-        message_queue.put("Loading complete")
-    else:
-        message_queue.put("Backup jobdict not found, creating from scratch")
+    table = Table(jobs, db, args.table, updater, analyzer, alerter, args.reload)
 
-    update_event.set()
+    auto_updater = mp.Process(target=auto_update,
+                              args=(table,))
+    auto_updater.start()
 
-    update_process = mp.Process(target=table_trigger,
-                                args=(update_event, ))
-    update_process.start()
+    command_line = CommandLine(alerter, table)
+    command_line.run()
 
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers()
-    subparsers.required = True
-
-    process_parser = subparsers.add_parser("process")
-    process_parser.set_defaults(which="process")
-    process_parser.add_argument("job_id", type=int)
-
-    show_parser = subparsers.add_parser("show")
-    show_parser.set_defaults(which="show")
-
-    quit_parser = subparsers.add_parser("quit")
-    quit_parser.set_defaults(which="quit")
-
-    kill_parser = subparsers.add_parser("kill")
-    kill_parser.set_defaults(which="kill")
-    kill_parser.add_argument("job_id", type=int)
-
-    while True:
-        command = raw_input("%s: " % args.table)
-        try:
-            a = parser.parse_args(command.split())
-            if a.which == "quit":
-                message_queue.put("quit")
-                table_process.terminate()
-                update_process.terminate()
-                model_process.terminate()
-                running_process.terminate()
-                message_process.join()
-                message_process.terminate()
-                return
-            elif a.which == "show":
-                message_queue.put(job_dict)
-            elif a.which == "process":
-                job_id = a.job_id
-                prefix = job_dict[job_id]["file_prefix"]
-                if not prefix in in_queue:
-                    in_queue.append(prefix)
-                    model_queue.put(prefix)
-                    message_queue.put("Models in process queue:\n %s" % "\n".join(in_queue))
-                else:
-                    message_queue.put("Model %s already in queue." % prefix)
-            elif a.which == "kill":
-                job_id = a.job_id
-                now = time.time()
-                process = psutil.Process(job_dict[job_id]["pid"])
-                if process.is_running():
-                    process.kill()
-                    while process.is_running():
-                        if time.time() - now > 20:
-                            break
-                    if process.is_running():
-                        message_queue.put("Job not stopped after 20 secs")
-                    else:
-                        message_queue.put("Job %d killed" % job_id)
-                else:
-                    message_queue.put("No such job running.")
-
-        except Exception as e:
-            print e
-            pass
-
-    table_process.join()
-    model_process.join()
+    updater.join()
+    analyzer.join()
 
 def make_argument_parser():
     parser = argparse.ArgumentParser()
