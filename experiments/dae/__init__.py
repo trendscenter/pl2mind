@@ -295,7 +295,7 @@ def run_experiment(experiment, **kwargs):
         Typically hyperparameters.
     """
 
-    hyper_parameters = experiment.default_hyperparams
+    hyper_parameters = experiment.default_hyperparams()
     set_hyper_parameters(hyper_parameters, **kwargs)
     file_parameters = experiment.fileparams
     set_hyper_parameters(file_parameters, **kwargs)
@@ -303,8 +303,7 @@ def run_experiment(experiment, **kwargs):
 
     ih = MRIInputHandler()
     input_dim, variance_map_file = ih.get_input_params(hyper_parameters)
-    if hyper_parameters["nvis"] == 0:
-        hyper_parameters["nvis"] = input_dim
+    hyper_parameters["nvis"] = input_dim
     hyper_parameters["variance_map_file"] = variance_map_file
 
     pid = os.getpid()

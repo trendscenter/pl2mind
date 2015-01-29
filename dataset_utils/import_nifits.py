@@ -30,9 +30,9 @@ from pylearn2.utils import serial
 logging.basicConfig(format="[%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
-def natural_sort(l): 
-    convert = lambda text: int(text) if text.isdigit() else text.lower() 
-    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
+def natural_sort(l):
+    convert = lambda text: int(text) if text.isdigit() else text.lower()
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ]
     return sorted(l, key = alphanum_key)
 
 def save_variance_map(dataset, save_path):
@@ -43,7 +43,7 @@ def save_variance_map(dataset, save_path):
 def pull_niftis(source_directory, *args):
     """
     Pull healthy and schizophrenia nitfi files from a source_directory. Uses glob to get multiple files.
-    
+
     Parameters
     ----------
     source_directory: string
@@ -73,8 +73,8 @@ def pull_niftis(source_directory, *args):
                 file_lists.append(file_list)
             elif isinstance(arg, str):
                 file_list = glob(path.join(source_directory, arg))
-                if len(file_list) == 0: 
-                    logger.warn("Files are empty with pattern %s" % 
+                if len(file_list) == 0:
+                    logger.warn("Files are empty with pattern %s" %
                                 path.join(source_directory, arg))
                 file_lists.append(file_list)
             else:
@@ -94,7 +94,7 @@ def read_niftis(file_lists):
     ----------
     file_lists: list of list of paths.
         Each list of file paths is a unique class.
-    
+
     Returns
     -------
     data, labels: tuple of array-like and list
@@ -121,7 +121,7 @@ def read_niftis(file_lists):
 
     for i, f in enumerate([item for sublist in file_lists for item in sublist]):
         logger.info("Loading subject from file: %s%s" % (f, '' * 30))
-        
+
         nifti = load_image(f)
         subject_data = nifti.get_data()
 
@@ -131,7 +131,7 @@ def read_niftis(file_lists):
             data[i * t: (i + 1) * t] = subject_data.transpose((3, 0, 1, 2))
         else:
             raise ValueError("Cannot parse subject data with dimensions %r" % subject_data.shape)
-    
+
     logger.info("\rLoading subject from file: %s\n" % ('DONE' + " "*30))
     if data.shape[0] != len(labels):
         raise ValueError("Data and labels have different number of samples.")
@@ -144,8 +144,8 @@ def test_distribution(data, mask=None):
         mask_idx = np.where(mask.flatten() == 1)[0].tolist()
         data = data[:, mask_idx]
     k = kurtosis(data, axis=0)
-    s = skew(data, axis=0) 
-    
+    s = skew(data, axis=0)
+
     logger.info("Proportion voxels k <= -1: %.2f"
                 % (len(np.where(k <= -1)[0].tolist()) * 1. / data.shape[1]))
     logger.info("Proportion voxels -1 < k < 1: %.2f"
@@ -169,7 +169,7 @@ def test_distribution(data, mask=None):
 def split_save_data(data, labels, train_percentage, out_dir):
     """
     Randomly split data into training and test and then save.
-    
+
     Parameters
     ----------
     data: array-like
@@ -220,7 +220,7 @@ def save_mask(data, out_dir):
             if abs(zero_freq.mean() - freq) > .05:
                 raise ValueError("Spurious datapoint, mean zeros frequency is %.2f,"
                                  "datapoint is %.2f" % (zero_freq.mean(), freq))
-        mask[np.where(np.invert((data < 0.07).sum(0) > .01 * data.shape[0]))] = 1 
+        mask[np.where(np.invert((data < 0.07).sum(0) > .01 * data.shape[0]))] = 1
     else:
         logger.info("Deriving mask from mean image.")
         mask[np.where(data.mean(axis=0) > data.mean())] = 1
@@ -271,6 +271,10 @@ def is_simTBdir(source_directory):
     return False
 
 def from_dir(source_directory, out_dir, args):
+    """
+    Loads niftis from a directory.
+    Labels specified by args.sz_pattern and args.h_pattern.
+    """
     if is_simTBdir(source_directory):
         data, labels, sim_dict = load_simTB_data(source_directory)
     else:
@@ -285,11 +289,14 @@ def from_dir(source_directory, out_dir, args):
     mask = save_mask(data, out_dir)
     if args.verbose:
         test_distribution(data, mask)
-    split_save_data(data, labels, .80, out_dir)
+    split_save_data(data, labels, args.split, out_dir)
     if sim_dict is not None:
         pickle.dump(sim_dict, open(path.join(out_dir, "sim_dict.pkl"), "wb"))
 
 def read_file_list(file_path):
+    """
+    Reads a file list from a file including labels.
+    """
     with open(file_path, "r") as f:
         lines = f.readlines()
         parsed_lines = [l.translate(None, "\n").split("\t") for l in lines]
@@ -308,12 +315,31 @@ def read_file_list(file_path):
     return file_lists
 
 def from_file(file_path, out_dir, args):
+    """
+    Loads niftis from list in file.
+    """
     file_lists = read_file_list(file_path)
     data, labels = read_niftis(file_lists)
     mask = save_mask(data, out_dir)
     if args.verbose:
         test_distribution(data, mask)
-    split_save_data(data, labels, .80, out_dir)
+    split_save_data(data, labels, args.split, out_dir)
+
+def from_patterns(file_path, out_dir, args):
+    """
+    Loads niftis from a set of patterns.
+    Patterns are glob.
+    """
+    file_lists = []
+    for i, pattern in enumerate(args.patterns):
+        file_list = glob(pattern)
+        logger.info("Found %r" % file_list)
+        file_lists.append(file_list)
+    data, labels = read_niftis(file_lists)
+    mask = save_mask(data, out_dir)
+    if args.verbose:
+        test_distribution(data, mask)
+    split_save_data(data, labels, args.split, out_dir)
 
 def make_argument_parser():
     """
@@ -322,12 +348,26 @@ def make_argument_parser():
     """
 
     parser = argparse.ArgumentParser()
- 
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show more verbosity!")
-    parser.add_argument("out", help="output directory under ${PYLEARN2_NI_PATH}")
-    
+
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Show more verbosity!")
+    parser.add_argument("out",
+                        help="output directory under args.out_prefix")
+    parser.add_argument("-o", "--out_prefix", default="${PYLEARN2_NI_PATH}",
+                        help="Prefix of out path. Set for custom path.")
+    parser.add_argument("-s", "--split", default=0.8, type=float,
+                        help=("train/test split. .8 means "
+                              "80%% train, 20%% test."))
+
     subparsers = parser.add_subparsers(help="sub-command help")
     subparsers.required = True
+
+    from_patterns_parser = subparsers.add_parser("from_patterns")
+    from_patterns_parser.set_defaults(which="from_patterns")
+    from_patterns_parser.add_argument("patterns", nargs="+",
+                                      help="space delimited list of POSIX "
+                                      "glob patterns. Each pattern specifies a "
+                                      "list of files.")
 
     from_directory_parser = subparsers.add_parser("from_directory")
     from_directory_parser.set_defaults(which="from_directory")
@@ -357,7 +397,7 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    out_dir = serial.preprocess("${PYLEARN2_NI_PATH}" + args.out)
+    out_dir = serial.preprocess(args.out_prefix + args.out)
     assert path.isdir(out_dir), ("No output directory found (%s), you must make it"
                                  % out_dir)
 
@@ -370,4 +410,6 @@ if __name__ == "__main__":
         if not path.isfile(args.file):
             raise IOError("%s not found" % args.file)
         from_file(args.file, out_dir, args)
-        
+
+    elif args.which == "from_patterns":
+        from_patterns(args.patterns, out_dir, args)

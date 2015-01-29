@@ -1,0 +1,59 @@
+!obj:pylearn2.train.Train {
+    dataset: &train !obj:pl2mind.datasets.MRI.%(data_class)s {
+        which_set: "train",
+        unit_normalize: &un True,
+        apply_mask: &app_mask True,
+        dataset_name: &ds_name %(dataset_name)s,
+    },
+    model: !obj:pylearn2.models.mlp.MLP {
+        batch_size: %(batch_size)d,
+        layers: [
+            !obj:pylearn2.models.mlp.PretrainedLayer {
+                layer_name: 'h1',
+                layer_content: !pkl: "%(out_path)s/pt1.pkl"
+            },
+            !obj:pylearn2.models.mlp.PretrainedLayer {
+                layer_name: 'h2',
+                layer_content: !pkl: "%(out_path)s/pt2.pkl"
+            },
+            !obj:pylearn2.models.mlp.Linear {
+                dim: %(nvis)d,
+                layer_name: "output",
+                irange: .05
+            }
+        ],
+        nvis: %(nvis)d
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        learning_rate: %(learning_rate)d,
+        learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
+            init_momentum: %(init_momentum)f,
+        },
+        train_iteration_mode: "even_shuffled_sequential",
+        monitor_iteration_mode: "even_shuffled_sequential",
+        monitoring_dataset: {
+            'train' : *train,
+            'valid': !obj:pl2mind.datasets.MRI.%(data_class)s {
+                which_set: "test",
+                unit_normalize: *un,
+                apply_mask: *app_mask,
+                dataset_name: *ds_name
+            },
+        },
+        cost: !obj:pylearn2.costs.mlp.Default {},
+        termination_criterion: %(termination_criterion)s,
+        update_callbacks: !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+            decay_factor: %(decay_factor)f,
+            min_lr: %(min_lr)f
+        }
+    },
+    extensions: [
+        !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+            start: 5,
+            saturate: 30,
+            final_momentum: %(final_momentum)f
+        }
+    ],
+    save_path: "%(out_path)s/model.pkl",
+    save_freq : 10
+}

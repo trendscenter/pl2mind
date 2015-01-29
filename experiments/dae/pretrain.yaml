@@ -1,0 +1,39 @@
+!obj:pylearn2.train.Train {
+    dataset: &train !obj:pylearn2.datasets.transformer_dataset.TransformerDataset {
+        raw: !obj:pl2mind.datasets.MRI.%(data_class)s {
+            which_set: "train",
+            unit_normalize: &un True,
+            apply_mask: &app_mask True,
+            dataset_name: &ds_name %(dataset_name)s
+        },
+        transformer: !pkl: "%(out_path)s/pt1.pkl"
+    },
+    model: !obj:pylearn2.models.autoencoder.DenoisingAutoencoder {
+        nvis : %(nvis)i,
+        nhid : %(nhid)i,
+        irange : 0.05,
+        corruptor: %(corruptor)s,
+        act_enc: %(act_enc)s,
+        act_dec: %(act_dec)s,
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        learning_rate : %(learning_rate)f,
+        batch_size: %(batch_size)d,
+        monitoring_dataset: {
+            "train": *train,
+            "valid": !obj:pylearn2.datasets.transformer_dataset.TransformerDataset {
+                raw: !obj:pl2mind.datasets.MRI.%(data_class)s {
+                    which_set: "test",
+                    unit_normalize: *un,
+                    apply_mask: *app_mask,
+                    dataset_name: *ds_name
+                },
+                transformer: !pkl: "%(out_path)s/pt1.pkl"
+            }
+        },
+        cost : !obj:pylearn2.costs.autoencoder.MeanSquaredReconstructionError {},
+        termination_criterion: %(termination_criterion)s
+    },
+    save_path: "%(out_path)s/pt2.pkl",
+    save_freq : 10
+}

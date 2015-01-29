@@ -47,10 +47,6 @@ def default_hyperparams(input_dim=0):
             "prop_decrease": 0,
             "N": 20
             },
-        "weight_decay": {
-            "__builder__": "pylearn2.costs.mlp.L1WeightDecay",
-            "coeffs": {"z": 0.01}
-            },
         "niter": 1,
         "data_class": "MRI_Standard",
         "weight_decay": {
