@@ -10,8 +10,8 @@ fileparams = {
 default_hyperparams  = {
     "nvis": 0,
     "dataset_name": "smri",
-    "learning_rate": 0.001,
-    "min_lr": 0.0001,
+    "learning_rate": 0.0001,
+    "min_lr": 0.00001,
     "decay_factor": 1.0005,
     "batch_size": 10,
     "init_momentum": 0.0,

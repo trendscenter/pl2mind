@@ -5,27 +5,15 @@
         apply_mask: &app_mask True,
         dataset_name: &ds_name %(dataset_name)s,
     },
-    model: !obj:pylearn2.models.mlp.MLP {
-        batch_size: %(batch_size)d,
-        layers: [
-            !obj:pylearn2.models.mlp.PretrainedLayer {
-                layer_name: 'h1',
-                layer_content: !pkl: "%(out_path)s/pt1.pkl"
-            },
-            !obj:pylearn2.models.mlp.PretrainedLayer {
-                layer_name: 'h2',
-                layer_content: !pkl: "%(out_path)s/pt2.pkl"
-            },
-            !obj:pylearn2.models.mlp.Linear {
-                dim: %(nvis)d,
-                layer_name: "output",
-                irange: .05
-            }
-        ],
-        nvis: %(nvis)d
+    model: !obj:pylearn2.models.autoencoder.DeepComposedAutoencoder {
+        autoencoders: [
+            !pkl: "%(out_path)s/pt1.pkl",
+            !pkl: "%(out_path)s/pt2.pkl"
+        ]
     },
     algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
         learning_rate: %(learning_rate)d,
+        batch_size: %(batch_size)d,
         learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
             init_momentum: %(init_momentum)f,
         },
@@ -40,7 +28,7 @@
                 dataset_name: *ds_name
             },
         },
-        cost: !obj:pylearn2.costs.mlp.Default {},
+        cost : !obj:pylearn2.costs.autoencoder.MeanSquaredReconstructionError {},
         termination_criterion: %(termination_criterion)s,
         update_callbacks: !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
             decay_factor: %(decay_factor)f,
