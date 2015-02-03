@@ -116,6 +116,8 @@ $(document).ready(function() {
 			console.log("Got " + data.response);
 			if (data.response == "SUCCESS") {
 			    trigger.innerHTML = "Process";
+			} else if (data.respond == "Already") {
+			    trigger.innerHTML = "Please wait";
 			} else {
 			    trigger.innerHTML = "Failed";
 			}
@@ -402,8 +404,6 @@ $(document).ready(function() {
 	};
 
 	function plotGroup(group, id) {
-	    console.log("Plotting group ");
-	    console.log(group);
 	    stats = [];
 	    for (var stat in group) {
 		if (group.hasOwnProperty(stat)) {
