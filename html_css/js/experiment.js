@@ -157,10 +157,13 @@ $(document).ready(function() {
 
 	var kill = makeButton("kill-trigger", "kill_button", "STOP", true);
 	var stats = document.getElementById("stats");
-	stats.appendChild(kill);
+	stats.firstChild.appendChild(kill);
 
 	var process = makeButton("process-trigger", "process_button",
 				 "Process", true);
+	var last_processed = document.createElement("div");
+	last_processed.innerHTML = "Last processed: No info";
+	process.appendChild(last_processed);
 	var tabs = document.getElementById("myTab");
 	tabs.appendChild(process);
 
@@ -356,6 +359,7 @@ $(document).ready(function() {
 	var results = json.outputs;
 	var processing = json.processing;
 	port = stats.port;
+	var last_processed = json.last_processed;
 
 	function updateInfo(info, info_div) {
 	    while (info_div.firstChild) {
@@ -472,7 +476,7 @@ $(document).ready(function() {
 	    updatePdf(result, results[result]);
 	}
 
-	updateButtons(processing);
+	updateButtons(processing, last_processed);
 
 	$("<div id='tooltip'></div>").css({
 	    position: "absolute",
@@ -486,7 +490,7 @@ $(document).ready(function() {
 	}).appendTo("body");
     }
 
-    function updateButtons(processing) {
+    function updateButtons(processing, last_processed) {
 	var kill = document.getElementById("kill_button");
 	var kill_button = kill.children[0];
 	kill_button.innerHTML = "STOP";
@@ -506,6 +510,8 @@ $(document).ready(function() {
 	} else {
 	    process_button.innerHTML = "Process";
 	}
+	proces_button.firstChild.innerHTML =
+	    "Last processed: " + last_processed;
     }
 
     function setLayout() {

@@ -129,7 +129,7 @@ class LogHandler(object):
         Shared float of cpu percentage for this process.
     port: int
         Port the socket is listening on.
-    last_processed: mp.Value
+    last_processed: mp.Manager.dict
         Shared float when model was last processed
     """
 
@@ -191,7 +191,7 @@ class LogHandler(object):
         self.d["stats"]["status"] = "RUNNING (afaik)"
         p = psutil.Process(self.pid)
         self.d["processing"] = bool(self.processing_flag.value)
-        self.d["last_processed"] = self.last_processed.valie
+        self.d["last_processed"] = self.last_processed["value"]
         stats = {
             "cpu": self.cpu.value,
             "mem": self.mem.value,
@@ -351,12 +351,12 @@ class ModelProcessor(mp.Process):
             try:
                 self.experiment.analyze_fn(self.best_checkpoint, self.out_path)
                 self.ep.send("SUCCESS")
-                self.last_processed.value = datetime.datetime.now().strftime(
+                self.last_processed["value"] = datetime.datetime.now().strftime(
                     "%Y-%m-%d %H:%M:%S")
             except IOError:
                 self.experiment.analyze_fn(self.checkpoint, self.out_path)
                 self.ep.send("SUCCESS")
-                self.last_processed.value = datetime.datetime.now().strftime(
+                self.last_processed["value"] = datetime.datetime.now().strftime(
                     "%Y-%m-%d %H:%M:%S")
             except Exception as e:
                 print (e)
@@ -532,7 +532,8 @@ def run_experiment(experiment, **kwargs):
     processing_flag = mp.Value("b", False)
     mem = mp.Value("f", 0.0)
     cpu = mp.Value("f", 0.0)
-    last_processed = mp.Value("s", "Never")
+    last_processed = mp.Manager().dict()
+    last_processed["value"] = "Never"
 
     lh = LogHandler(experiment, hyper_parameters, out_path,
                     pid, processing_flag, mem, cpu, port, last_processed)

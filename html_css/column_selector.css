@@ -114,6 +114,7 @@
 .process-trigger {
     display: block;
     width: 90px;
+    margin-top: 0px;
     margin-right: 0px;
     height: 18px;
     text-align: center;
@@ -187,5 +188,5 @@
 }
 
 #process_button {
-    margin-top: 10px;
+    margin-top: 0px;
 }
