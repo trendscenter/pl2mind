@@ -342,7 +342,9 @@ $(document).ready(function() {
 		$(pdf_div).replaceWith(pdf_object);
 	    },
 	    error: function(d) {
-		$(pdf_div).replaceWith("<div>" + result +
+		$(pdf_div).replaceWith("<div>" +
+				       result.charAt(0).toUpperCase() +
+				       result.slice(1) +
 				       " not found. Try Processing</div>");
 	    }
 	});
@@ -510,7 +512,7 @@ $(document).ready(function() {
 	} else {
 	    process_button.innerHTML = "Process";
 	}
-	proces_button.firstChild.innerHTML =
+	process.children[1].innerHTML =
 	    "Last processed: " + last_processed;
     }
 

@@ -189,9 +189,8 @@ class LogHandler(object):
         Process stats are handled by a StatProcessor worker.
         """
         self.d["stats"]["status"] = "RUNNING (afaik)"
+
         p = psutil.Process(self.pid)
-        self.d["processing"] = bool(self.processing_flag.value)
-        self.d["last_processed"] = self.last_processed["value"]
         stats = {
             "cpu": self.cpu.value,
             "mem": self.mem.value,
@@ -203,6 +202,11 @@ class LogHandler(object):
         for key, value in stats.iteritems():
             if key in self.d["logs"].keys():
                 self.d["logs"][key][key].append(value)
+
+        self.d["processing"] = bool(self.processing_flag.value)
+        if self.last_processed["value"] != "Never":
+            self.d["last_processed"] = self.last_processed["value"] +\
+                " (epoch %d)" % len(self.d["logs"]["cpu"]["cpu"])
 
     def compile_channels(self):
         """

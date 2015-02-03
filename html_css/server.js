@@ -22,7 +22,7 @@ server.use(bodyParser.urlencoded({extended: true}));
 console.log("Server started. Root directory is " + __dirname);
 
 server.get("/*/$", function(request, response) {
-    response.sendFile("experiment.html", { root: __dirname });
+    response.sendFile("html_css/experiment.html", { root: __dirname });
 });
 /*
 server.get(/^\/(.+)/, function(request, response) {
