@@ -2,6 +2,7 @@
     font-size: 100%;
     font-family: "Lato", sans-serif;
     color: #6f7c95;
+    font-size: 16px;
     background-color: #efefff;
 }
 
@@ -39,6 +40,12 @@
     padding: 5px 50px;
 }
 
+.button_div {
+    display: inline-block;
+    vertical-align: middle;
+    padding: 0px 10px;
+}
+
 .plot_group_div {
     border: 2px solid #a1a1a1;
     padding: 5px 10px;
@@ -49,7 +56,7 @@
 
 .plot_content_div {
     border: 2px solid #a1a1a1;
-    padding: 5px 10px;
+    padding: 0px 10px;
     border-radius: 5px;
     display: inline-block;
     vertical-align: top;
@@ -102,4 +109,83 @@
 .btn.btn-default {
     margin-top: 5px;
     vertical-align: middle;
+}
+
+.process-trigger {
+    display: block;
+    width: 90px;
+    margin-right: 0px;
+    height: 18px;
+    text-align: center;
+    color: #FFF;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-radius: 50em;
+    background: #3C3;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
+}
+
+.kill-trigger {
+    display: block;
+    width: 60px;
+    margin-right: 0px;
+    height: 18px;
+    text-align: center;
+    color: #FFF;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-radius: 50em;
+    background: #E88;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
+}
+
+.live-trigger {
+    display: block;
+    width: 60px;
+    margin-right: 0px;
+    height: 18px;
+    text-align: center;
+    color: #FFF;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-radius: 50em;
+    background: #44D;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
+}
+
+.long-trigger {
+    width: 80px;
+}
+
+.is-hidden {
+    visibility: hidden;
+}
+
+#myTab {
+    margin: 10px 20px 10px 10px;
+}
+
+.tab-content {
+    background: white;
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: -10px 10px 10px 10px;
+    background-color: white;
+}
+
+.pdf_object {
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: 10px 10px 10px 10px;
+    height: 100%;
+    width: 100%;
+}
+
+#process_button {
+    margin-top: 10px;
 }

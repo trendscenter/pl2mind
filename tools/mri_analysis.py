@@ -401,7 +401,7 @@ def resolve_dataset(model, dataset_root=None):
     dataset = yaml_parse.load(dataset_yaml)
     return dataset
 
-def main(model, out_path, target_stat="", zscore=False,
+def main(model, out_path=None, target_stat="", zscore=False,
          prefix=None, dataset_root=None):
     """
     Main function of module.
@@ -409,7 +409,7 @@ def main(model, out_path, target_stat="", zscore=False,
 
     Parameters
     ----------
-    model_path: Pylearn2.Model or str
+    model: Pylearn2.Model or str
         Model instance or path for the model.
     out_path: str
         Path for the output directory.
@@ -421,9 +421,8 @@ def main(model, out_path, target_stat="", zscore=False,
     simtb_viewer.logger.level = logger.level
     MRI_module.logger.level = logger.level
 
-    if prefix is None and isinstance(model, str):
-        prefix = ".".join(path.basename(model_path).split(".")[:-1])
-        out_path = path.join(out_path)
+    if out_path is None and prefix is None and isinstance(model, str):
+        prefix = ".".join(path.basename(model).split(".")[:-1])
         montage_prefix = prefix
         spectrum_prefix = prefix
         nifti_prefix = prefix
@@ -432,9 +431,13 @@ def main(model, out_path, target_stat="", zscore=False,
         spectrum_prefix = "spectrum"
         nifti_prefix = "image"
 
+    if out_path is None:
+        assert isinstance(model, str)
+        out_path = path.abspath(path.dirname(model))
+
     if isinstance(model, str):
-        logger.info("Loading model from %s" % model_path)
-        model = serial.load(model_path)
+        logger.info("Loading model from %s" % model)
+        model = serial.load(model)
 
     if not path.isdir(out_path):
         os.mkdir(out_path)
@@ -495,11 +498,7 @@ def make_argument_parser():
 if __name__ == "__main__":
     parser = make_argument_parser()
     args = parser.parse_args()
-    if args.out_dir is None:
-        out_path = path.abspath(path.dirname(args.model_path))
-    else:
-        out_path = args.out_dir
     if args.verbose:
         logger.setLevel(logging.DEBUG)
-    main(args.model_path, out_path, args.target_stat, args.zscore, args.prefix,
+    main(args.model_path, args.out_path, args.target_stat, args.zscore, args.prefix,
          args.dataset_root)

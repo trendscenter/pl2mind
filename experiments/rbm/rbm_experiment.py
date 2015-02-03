@@ -58,3 +58,7 @@ results_of_interest = [
     "reconstruction_cost",
     "term_1_l1_weight_decay"
 ]
+
+# Set the analysis function.
+analyze_fn = mri_analysis.main
+outputs = ["montage"]
