@@ -17,9 +17,9 @@ import multiprocessing as mp
 import numpy as np
 import os
 from os import path
-from pl2mind.datasets import MRI
 import psutil
 
+from pl2mind.experiments import input_handler
 from pylearn2.config import yaml_parse
 from pylearn2.scripts.jobman.experiment import ydict
 from pylearn2 import monitor
@@ -29,81 +29,6 @@ import signal
 import socket
 import time
 import zmq
-
-
-class MRIInputHandler(object):
-    """
-    Input handler for MRI data.
-    This is an object in the case of loading multiple experiments with the same
-    data parameters.
-    TODO: clean up.
-    """
-    def __init__(self):
-        self.d = {}
-
-    def get_input_params(self, hyperparams):
-        """
-        Get the input parameters given data hyperparameters.
-
-        Parameters
-        ----------
-        hyperparams: dict
-            Hyperparameters.
-
-        Returns
-        -------
-        input_dim, variance_map_file: int, str
-            Input dimensionality and the location of the variance map file.
-        """
-
-        dataset_name = hyperparams["dataset_name"]
-        data_class = hyperparams["data_class"]
-        variance_normalize = hyperparams.get("variance_normalize", False)
-        unit_normalize = hyperparams.get("unit_normalize", False)
-        demean = hyperparams.get("demean", False)
-        assert not (variance_normalize and unit_normalize)
-
-        data_path = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
-
-        h = hash((data_class, variance_normalize, unit_normalize, demean))
-
-        if self.d.get(h, False):
-            return self.d[h]
-        else:
-            if data_class == "MRI_Transposed":
-                assert not variance_normalize
-                mri = MRI.MRI_Transposed(dataset_name=dataset_name,
-                                         unit_normalize=unit_normalize,
-                                         demean=demean,
-                                         even_input=True,
-                                         apply_mask=True)
-                input_dim = mri.X.shape[1]
-                variance_file_name = ("variance_map_transposed%s%s.npy"
-                                      % ("_un" if unit_normalize else "",
-                                         "_dm" if demean else ""))
-
-            elif data_class == "MRI_Standard":
-                assert not demean
-                mask_file = path.join(data_path, "mask.npy")
-                mask = np.load(mask_file)
-                input_dim = (mask == 1).sum()
-                if input_dim % 2 == 1:
-                    input_dim -= 1
-                mri = MRI.MRI_Standard(which_set="full",
-                                       dataset_name=dataset_name,
-                                       unit_normalize=unit_normalize,
-                                       variance_normalize=variance_normalize,
-                                       even_input=True,
-                                       apply_mask=True)
-                variance_file_name = ("variance_map%s%s.npy"
-                                      % ("_un" if unit_normalize else "",
-                                         "_vn" if variance_normalize else ""))
-
-        variance_map_file = path.join(data_path, variance_file_name)
-        if not path.isfile(variance_map_file):
-            mri_nifti.save_variance_map(mri, variance_map_file)
-        self.d[h] = (input_dim, variance_map_file)
-        return self.d[h]
 
 
 class LogHandler(object):
@@ -480,10 +405,15 @@ def run_experiment(experiment, **kwargs):
     hyper_parameters.update(file_parameters)
 
     # Use the input hander to get input information.
-    ih = MRIInputHandler()
+    ih = input_handler.MRIInputHandler()
     input_dim, variance_map_file = ih.get_input_params(hyper_parameters)
     if hyper_parameters["nvis"] is None:
         hyper_parameters["nvis"] = input_dim
+    # Hack for NICE. Need to rethink inner-dependencies of some model params.
+    if ("encoder" in hyper_parameters.keys()
+        and "nvis" in hyper_parameters["encoder"].keys()
+        and hyper_parameters["encoder"]["nvis"] is None):
+        hyper_parameters["encoder"]["nvis"] = input_dim
 
     # Corruptor is a special case of hyper parameters that depends on input
     # file: variance_map. So we hack it in here.
@@ -524,6 +454,7 @@ def run_experiment(experiment, **kwargs):
     hyper_parameters = expand(flatten(hyper_parameters), dict_type=ydict)
     yaml_template = open(experiment.yaml_file).read()
     yaml = yaml_template % hyper_parameters
+    print yaml
     train_object = yaml_parse.load(yaml)
 
     # Set up subprocesses and log handler.
