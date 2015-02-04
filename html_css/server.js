@@ -3,6 +3,7 @@ var url = require("url");
 var express = require("express");
 var bodyParser = require("body-parser");
 var directory = require("serve-index");
+var path = require("path");
 
 var port = process.argv[2]
 var html_css = process.argv[3];
@@ -17,20 +18,22 @@ var net = require('net');
 var zmq = require('zmq');
 
 server.use("html_css", directory(html_css));
-server.use(express.static("./"));
+server.use(express.static(path.resolve("./")));
 server.use(express.static("html_css"));
 server.use(bodyParser.json());
 server.use(bodyParser.urlencoded({extended: true}));
 
-console.log("Server started. Root directory is " + "./");
-
+console.log("Server started. Root directory is " + path.resolve("./"));
+/*
+server.get("/html_css/*$", function(req, res) {
+    console.log("here");
+    console.log(req);
+    res.send(path.join(html_css), req.params[0]);
+});
+*/
 server.get("/*/$", function(request, response) {
     response.sendFile("experiment.html", { root: __dirname });
 });
-/*
-server.get(/^\/(.+)/, function(request, response) {
-    response.sendFile("/test_plots.html", { root: request.params[0] });
-});*/
 
 server.post('/killme', function(req, res) {
     console.log(req.body);
