@@ -72,9 +72,10 @@ class MRIInputHandler(object):
                                        variance_normalize=variance_normalize,
                                        even_input=True,
                                        apply_mask=True)
-                variance_file_name = ("variance_map%s%s.npy"
+                variance_file_name = ("variance_map%s%s%s.npy"
                                       % ("_un" if unit_normalize else "",
-                                         "_vn" if variance_normalize else ""))
+                                         "_vn" if variance_normalize else "",
+                                         "_dm" if demean else ""))
 
         variance_map_file = path.join(data_path, variance_file_name)
         if not path.isfile(variance_map_file):
