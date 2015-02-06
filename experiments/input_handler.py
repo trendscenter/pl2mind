@@ -5,6 +5,7 @@ Module for input handler.
 import numpy as np
 from os import path
 from pl2mind.datasets import MRI
+from pl2mind.tools import mri_nifti
 from pylearn2.utils import serial
 
 

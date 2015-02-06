@@ -4,7 +4,6 @@ from jobman.tools import flatten
 
 import os
 from os import path
-import pylab as plt
 
 from pl2mind.tools import mri_analysis
 
