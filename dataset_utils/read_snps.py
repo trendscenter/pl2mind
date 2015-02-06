@@ -222,7 +222,7 @@ def convert_dat_to_haps(data, info_dict):
     new_haps_dict: dict
         New haps dictionary from data
     """
-    
+
     assert info_dict["ext"] == "info"
     assert (len(info_dict) - 1) == (data.shape[0] // 2), (len(info_dict), data.shape)
 
@@ -238,7 +238,7 @@ def convert_dat_to_haps(data, info_dict):
         assert data_entry.shape[0] == 2,\
             "data entry shape on SNP %s is %s (idx %d out of %d)" % (SNP_name, data_entry.shape, i, data.shape[0])
         value_entry = data_entry.sum(axis=0) - 2
-        
+
         assert SNP_name in new_haps_dict.keys(), SNP_name
         new_haps_dict[SNP_name]["values"] = value_entry
         assert "minor" in new_haps_dict[SNP_name], SNP_name
@@ -536,7 +536,7 @@ def read_dataset_directory(directory, chromosomes=22,
             assert "cases" in dataset_dict[c]
             assert "controls" in dataset_dict[c]
             assert have_same_SNP_order(dataset_dict[c]["cases"], dataset_dict[c]["controls"])
-            
+
     if snps_reference is not None:
         logger.info("Setting to snp reference")
         snps_ref_dataset_dict, _, _ = read_dataset_directory(snps_reference,
@@ -939,7 +939,7 @@ def set_A_with_B(file_A, file_B, nofill=False):
         elif dict_B["ext"] == "tped":
             minor_allele, major_allele = (dict_B[SNP_name]["minor_allele"],
                                           dict_B[SNP_name]["major_allele"])
-            allele_pairs = [[(minor_allele, minor_allele)], 
+            allele_pairs = [[(minor_allele, minor_allele)],
                             [(minor_allele, major_allele), (major_allele, minor_allele)],
                             [(major_allele, major_allele)]]
             B_priors = np.array([sum([1 for b in B_values if b in pairs]) * 1. / len(B_values)
@@ -955,7 +955,7 @@ def set_A_with_B(file_A, file_B, nofill=False):
         elif new_dict_A["ext"] == "tped":
             minor_allele, major_allele = (dict_B[SNP_name]["minor_allele"],
                                           dict_B[SNP_name]["major_allele"])
-            allele_pairs = [(minor_allele, minor_allele), 
+            allele_pairs = [(minor_allele, minor_allele),
                             (minor_allele, major_allele),
                             (major_allele, major_allele)]
             values = np.random.choice(range(3),
@@ -1014,7 +1014,7 @@ def A_has_similar_priors_to_B(file_A, file_B):
             len(np.where(prior_A - prior_B > 0.15)[0].tolist()) * 1. / prior_A.shape[0])
         percent_reversed = (len(np.where(
                     np.logical_and(
-                        prior_A - priors_B[-(i - 1) + 1] <= 0.15, 
+                        prior_A - priors_B[-(i - 1) + 1] <= 0.15,
                         prior_A - prior_B > 0.15))[0].tolist()) * 1. /prior_A.shape[0])
         if percent_off > .05:
             logger.warn("Priors P(%d) not close: %.2f%% off by 15%% or more"
@@ -1237,7 +1237,7 @@ def split_haps(chr_dict, labels, separate_info=False, transposed=False):
     else:
         transposed_prefix = ""
 
-    write_haps_file(controls_haps, 
+    write_haps_file(controls_haps,
                     path.join(chr_dict["directory"],
                               prefix + transposed_prefix + "input_controls.haps"),
                     omit_info=separate_info, transposed=transposed)
@@ -1269,7 +1269,7 @@ if __name__ == "__main__":
         chr_dict = read_chr_directory(args.chr_dir)
         labels = parse_labels_file(args.labels)
         split_haps(chr_dict, labels, args.separate_info, args.transposed)
-        
+
     elif args.which == "compare":
         dir_dict_1 = read_chr_directory(args.dir_1)
         dir_dict_2 = read_chr_directory(args.dir_2)
@@ -1329,11 +1329,11 @@ if __name__ == "__main__":
                     in_data_not_in_ref = data_snps - snp_ref_snps
                     assert len(in_data_not_in_ref) == 0, len(in_data_not_in_ref)
                     logger.info("Data now a strict subset of reference with %d SNPs" % len(data_snps))
-            
+
                 else:
                     assert have_same_SNP_order(data_chr_dict, snp_ref_chr_dict)
                     logger.info("Data now the same set of SNPs as reference")
-            
+
         def get_ext(d):
             if "controls" in d:
                 return "controls"
@@ -1364,7 +1364,7 @@ if __name__ == "__main__":
             logger.info("Saving chromosome %d to %s" %
                         (c, path.join(out_dir, "chr%d.npy" % c)))
             np.save(path.join(out_dir, "chr%d.npy" % c), data[c])
-            
+
             save_snp_names(path.join(out_dir, "chr%d.snps" % c),
-                           [k for k in data_dict[c][get_ext(data_dict[c])] 
+                           [k for k in data_dict[c][get_ext(data_dict[c])]
                             if k != "ext"])

@@ -8,18 +8,27 @@ matplotlib.use("Agg")
 import copy
 import datetime
 import glob
+import imp
+
+from jobman import api0
+from jobman.dbi.dbi import DBILocal
+from jobman import sql
+from jobman.sql_runner import runner_sql
+from jobman.tools import DD
 from jobman.tools import expand
 from jobman.tools import flatten
+
 import json
 import Levenshtein
 import logging
 import multiprocessing as mp
 import numpy as np
+import optparse
 import os
 from os import path
+from pl2mind.experiments import input_handler
 import psutil
 
-from pl2mind.experiments import input_handler
 from pylearn2.config import yaml_parse
 from pylearn2.scripts.jobman.experiment import ydict
 from pylearn2 import monitor
@@ -129,7 +138,7 @@ class LogHandler(object):
                 self.d["logs"][key][key].append(value)
 
         self.d["processing"] = bool(self.processing_flag.value)
-        if self.last_processed["value"] != "Never":
+        if self.d["processing"]:
             self.d["last_processed"] = self.last_processed["value"] +\
                 " (epoch %d)" % len(self.d["logs"]["cpu"]["cpu"])
 
@@ -383,7 +392,7 @@ def set_hyper_parameters(hyper_parameters, **kwargs):
             if split_keys[-1] in entry:
                 entry[split_keys[-1]] = value
 
-def run_experiment(experiment, **kwargs):
+def run_experiment(experiment, hyper_parameters = None, **kwargs):
     """
     Experiment function.
     Used by jobman to run jobs. Must be loaded externally.
@@ -398,7 +407,9 @@ def run_experiment(experiment, **kwargs):
     """
 
     # Fill the hyperparameter values.
-    hyper_parameters = experiment.default_hyperparams
+    if hyper_parameters is None:
+        hyper_parameters = experiment.default_hyperparams
+
     set_hyper_parameters(hyper_parameters, **kwargs)
     file_parameters = experiment.fileparams
     set_hyper_parameters(file_parameters, **kwargs)
@@ -414,6 +425,10 @@ def run_experiment(experiment, **kwargs):
         and "nvis" in hyper_parameters["encoder"].keys()
         and hyper_parameters["encoder"]["nvis"] is None):
         hyper_parameters["encoder"]["nvis"] = input_dim
+
+    # If there's min_lr, make it 1/10 learning_rate
+    if "min_lr" in hyper_parameters.keys():
+        hyper_parameters["min_lr"] = hyper_parameters["learning_rate"] / 10
 
     # Corruptor is a special case of hyper parameters that depends on input
     # file: variance_map. So we hack it in here.
@@ -431,7 +446,7 @@ def run_experiment(experiment, **kwargs):
     out_path = serial.preprocess(
         hyper_parameters.get("out_path", "${PYLEARN2_OUTS}"))
     if not path.isdir(out_path):
-        os.mkdir(out_path)
+        os.makedirs(out_path)
 
     # If any pdfs are in out_path, kill or quit
     if len(glob.glob(path.join(out_path, "*.pdf"))) > 0:
@@ -501,12 +516,13 @@ def run_experiment(experiment, **kwargs):
 
     # After complete, process model.
     try:
-        self.experiment.analyze_fn(model_processor.best_checkpoint,
+        experiment.analyze_fn(model_processor.best_checkpoint,
                                    model_processor.out_path)
         os.remove(model_processor.best_checkpoint)
     except IOError:
         experiment.analyze_fn(model_processor.checkpoint,
                               model_processor.out_path)
+        os.remove(model_processor.checkpoint)
     except Exception as e:
         print (e)
 
@@ -520,3 +536,102 @@ def run_experiment(experiment, **kwargs):
         os.remove(model_processor.checkpoint)
     except:
         pass
+
+    return
+
+def run_jobman_from_sql(jobargs):
+    dbdescr = ("postgres://%(user)s@%(host)s:"
+               "%(port)d/%(database)s?table=%(table)s"
+               % {"user": jobargs.user,
+                  "host": jobargs.host,
+                  "port": jobargs.port,
+                  "database": jobargs.database,
+                  "table": jobargs.table,
+                  })
+
+    command = "/na/homes/dhjelm/Code/Jobman/bin/jobman sql %s ." % dbdescr
+    dbi = DBILocal([command] * jobargs.n_proc,
+        **dict(log_dir="/export/mialab/users/dhjelm/Experiments/LOGS"))
+    dbi.nb_proc = jobargs.n_proc
+    dbi.run()
+
+def run_one_jobman(jobargs):
+    dbdescr = ("postgres://%(user)s@%(host)s:"
+               "%(port)d/%(database)s?table=%(table)s"
+               % {"user": jobargs.user,
+                  "host": jobargs.host,
+                  "port": jobargs.port,
+                  "database": jobargs.database,
+                  "table": jobargs.table,
+                  })
+    options = optparse.Values(dict(modules=None,
+                                   n=1,
+                                   workdir="/na/homes/dhjelm/tmp/jobman/",
+                                   finish_up_after=None,
+                                   save_every=None))
+    expdir = "/export/mialab/users/dhjelm/Experiments/"
+    runner_sql(options, dbdescr, expdir)
+
+def jobman_status(jobargs):
+    db = api0.open_db("postgres://%(user)s@%(host)s:"
+                      "%(port)d/%(database)s?table=%(table)s"
+                      % {"user": jobargs.user,
+                         "host": jobargs.host,
+                         "port": jobargs.port,
+                         "database": jobargs.database,
+                         "table": jobargs.table,
+                         })
+    for job in db.__iter__():
+        print "-------------------"
+        print "Job: %d" % job.id
+        print "Status: %d" % job.status
+        for k in job.keys():
+            print "\t%s\t%r" % (k, job[k])
+
+def clear_jobman(jobargs):
+    db = api0.open_db("postgres://%(user)s@%(host)s:"
+                      "%(port)d/%(database)s?table=%(table)s"
+                      % {"user": jobargs.user,
+                         "host": jobargs.host,
+                         "port": jobargs.port,
+                         "database": jobargs.database,
+                         "table": jobargs.table,
+                      })
+    for job in db.__iter__():
+        job.delete()
+
+def load_experiments_jobman(experiment_module, jobargs):
+    db = api0.open_db("postgres://%(user)s@%(host)s:"
+                      "%(port)d/%(database)s?table=%(table)s"
+                      % {"user": jobargs.user,
+                         "host": jobargs.host,
+                         "port": jobargs.port,
+                         "database": jobargs.database,
+                         "table": jobargs.table,
+                         })
+
+    experiment = imp.load_source("module.name", experiment_module)
+    for i, items in enumerate(experiment.generator):
+        hyperparams = experiment.default_hyperparams
+
+        state = DD()
+        set_hyper_parameters(hyperparams, **dict((k, v) for k, v in items))
+        state.hyperparams = hyperparams
+        state.out_path = path.join(path.abspath(jobargs.out_path), "job_%d" % i)
+        state.experiment_module = path.abspath(experiment_module)
+
+        sql.insert_job(run_experiment_jobman,
+                       flatten(state),
+                       db)
+
+def run_experiment_jobman(state, channel):
+    experiment_module = state.experiment_module
+    experiment = imp.load_source("module.name", experiment_module)
+
+    yaml_template = open(experiment.yaml_file).read()
+    hyperparams = expand(flatten(state.hyperparams), dict_type=ydict)
+    out_path = path.join(state.out_path)
+
+    run_experiment(experiment, hyperparams, out_path=out_path)
+
+    return channel.COMPLETE
