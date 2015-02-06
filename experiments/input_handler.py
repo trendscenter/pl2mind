@@ -60,7 +60,6 @@ class MRIInputHandler(object):
                                          "_dm" if demean else ""))
 
             elif data_class == "MRI_Standard":
-                assert not demean
                 mask_file = path.join(data_path, "mask.npy")
                 mask = np.load(mask_file)
                 input_dim = (mask == 1).sum()
@@ -69,6 +68,7 @@ class MRIInputHandler(object):
                 mri = MRI.MRI_Standard(which_set="full",
                                        dataset_name=dataset_name,
                                        unit_normalize=unit_normalize,
+                                       demean=demean,
                                        variance_normalize=variance_normalize,
                                        even_input=True,
                                        apply_mask=True)
