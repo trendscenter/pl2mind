@@ -5,7 +5,7 @@ Module for input handler.
 import numpy as np
 from os import path
 from pl2mind.datasets import MRI
-from pl2mind.dataset_utils import mri_nifti
+from pl2mind.dataset_utils import mri_utils
 from pylearn2.utils import serial
 
 
@@ -80,6 +80,6 @@ class MRIInputHandler(object):
 
         variance_map_file = path.join(data_path, variance_file_name)
         if not path.isfile(variance_map_file):
-            mri_nifti.save_variance_map(mri, variance_map_file)
+            mri_utils.save_variance_map(mri, variance_map_file)
         self.d[h] = (input_dim, variance_map_file)
         return self.d[h]
