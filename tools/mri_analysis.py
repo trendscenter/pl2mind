@@ -45,9 +45,11 @@ logger = logging.getLogger(__name__)
 
 try:
     from nice.pylearn2.models.nice import NICE
+    import nice.pylearn2.models.mlp as nice_mlp
 except ImportError:
     class NICE (object):
         pass
+    nice_mlp = None
     logger.warn("NICE not found, so hopefully you're not trying to load a NICE model.")
 
 def get_activations(model, dataset):
@@ -71,8 +73,13 @@ def get_activations(model, dataset):
     data = dataset.get_design_matrix()
     if isinstance(model, NICE):
         if isinstance(dataset, MRI_Transposed):
-            S = model.encoder.layers[-1].D.get_value()
-            sigma = np.exp(-S)
+            top_layer = model.encoder.layers[-1]
+            if isinstance(top_layer, nice_mlp.Homothety):
+                S = top_layer.D.get_value()
+                sigma = np.exp(-S)
+            elif isinstance(top_layer, nice_mlp.SigmaScaling):
+                sigma = top_layer.S.get_value()
+
             num_features = model.nvis
             y = np.zeros((1, num_features))
             Y = sharedX(y)
@@ -356,9 +363,14 @@ def get_features(model, zscore=True, transposed_features=False,
 
     elif isinstance(model, NICE):
         logger.info("NICE layers: %r" % model.encoder.layers)
-        S = model.encoder.layers[-1].D.get_value()
-        sigma = np.exp(-S)
-        idx = np.argsort(S).tolist()
+        top_layer = model.encoder.layers[-1]
+        if isinstance(top_layer, nice_mlp.Homothety):
+            S = top_layer.D.get_value()
+            sigma = np.exp(-S)
+        elif isinstance(top_layer, nice_mlp.SigmaScaling):
+            sigma = top_layer.S.get_value()
+
+        idx = np.argsort(sigma).tolist()[::-1]
         num_features = len(idx)
         idx = idx[:max_features]
 

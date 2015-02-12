@@ -15,7 +15,6 @@ generator = jg.nested_generator(
     jg.float_generator("weight_decay.coeff", 3, 0.01, 0.0001)
     )
 
-default_hyperparams.update(
-    layer_depths = [3, 5, 5, 5, 3],
-    demean = True,
-    variance_normalize = True)
+default_hyperparams["encoder"]["layer_depths"] = [3, 5, 5, 5, 3]
+default_hyperparams["demean"] = 1
+default_hyperparams["variance_normalize"] = 1

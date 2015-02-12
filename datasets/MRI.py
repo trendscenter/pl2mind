@@ -108,7 +108,9 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             X -= X.mean()
 
         if self.demean:
-            assert isinstance(self.demean, int)
+            if isinstance(self.demean, tuple):
+                self.demean = self.demean[0]
+            assert isinstance(self.demean, int), self.demean
             if self.demean == 1:
                 X -= X.mean(axis = 0)
             elif self.demean == 2:
@@ -117,6 +119,8 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                 raise NotImplementedError
 
         if self.variance_normalize:
+            if isinstance(self.variance_normalize, tuple):
+                self.variance_normalize = self.variance_normalize[0]
             assert isinstance(self.variance_normalize, int)
             if self.variance_normalize == 1:
                 X /= X.std(axis = 0)

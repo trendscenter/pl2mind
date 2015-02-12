@@ -38,6 +38,7 @@ from pylearn2.utils import serial
 
 import signal
 import socket
+import sys
 import time
 import zmq
 
@@ -596,14 +597,18 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         lh.logger.info("waiting for stat processor...")
         stat_processor.join()
 
-        try:
-            os.remove(model_processor.best_checkpoint)
-        except:
-            pass
-        try:
-            os.remove(model_processor.checkpoint)
-        except:
-            pass
+        if keep:
+            hl.logger.info("Keeping checkpoints")
+        else:
+            hl.logger.info("Cleaning checkpoints")
+            try:
+                os.remove(model_processor.best_checkpoint)
+            except:
+                pass
+            try:
+                os.remove(model_processor.checkpoint)
+            except:
+                pass
 
     # A signal handler so processes kill cleanly.
     def signal_handler(signum, frame):
@@ -621,7 +626,7 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     try:
         train_object.main_loop()
     except Exception as e:
-        lh.logger.error(e)
+        lh.logger.exception(e)
         clean()
         lh.finish("FAILED")
         raise(e)
@@ -633,16 +638,13 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     try:
         experiment.analyze_fn(model_processor.best_checkpoint,
                                    model_processor.out_path)
-        os.remove(model_processor.best_checkpoint)
     except IOError:
         experiment.analyze_fn(model_processor.checkpoint,
                               model_processor.out_path)
-        os.remove(model_processor.checkpoint)
     except Exception as e:
         lh.logger.error(e)
 
     # Clean checkpoints.
-    # TODO(dhjelm): give option to keep checkpoints somewhere.
     clean()
     lh.logger.info("Finished experiment.")
     return

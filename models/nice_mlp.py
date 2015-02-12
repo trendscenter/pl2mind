@@ -11,6 +11,7 @@ from pylearn2.models.mlp import Linear
 from pylearn2.models.mlp import RectifiedLinear
 from nice.pylearn2.models.mlp import CouplingLayer
 from nice.pylearn2.models.mlp import Homothety
+from nice.pylearn2.models.mlp import SigmaScaling
 from nice.pylearn2.models.mlp import TriangularMLP
 
 
@@ -31,7 +32,7 @@ class Simple_MLP(MLP):
 
 
 class Simple_TriangularMLP(TriangularMLP):
-    def __init__(self, layer_name, layer_depths, nvis, nhid):
+    def __init__(self, layer_name, layer_depths, nvis, nhid, top_layer=None):
         layers = []
         for i, depth in enumerate(layer_depths):
             layer = CouplingLayer(split=nvis // 2,
@@ -41,7 +42,11 @@ class Simple_TriangularMLP(TriangularMLP):
                                                       nhid))
             layers.append(layer)
 
-        layer = Homothety(layer_name="z")
-        layers.append(layer)
+        if top_layer is None:
+            layer = Homothety(layer_name="z")
+            layers.append(layer)
+        else:
+            layer = top_layer
+            layers.append(layer)
 
         super(Simple_TriangularMLP, self).__init__(layers, layer_name=layer_name)
