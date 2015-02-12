@@ -26,6 +26,12 @@
     height: 70%;
 }
 
+#modelModal .modal-dialog {
+    width: 80%;
+    height: 90%;
+    overflow-y: scroll;
+}
+
 .modal-dialog.large {
     width: 80%; /* respsonsive width */
 }
@@ -79,7 +85,7 @@
 
 .table_header_div {
     border: 1px solid #559999;
-    width: 222px;
+    width: 280px;
     height: 45px;
     border-radius: 5px;
     margin: 5px 5px 5px 5px;
@@ -90,7 +96,7 @@
     height: 45px;
     float: left;
     margin-left: 10px;
-    width: 140px;
+    width: 180px;
 }
 
 #title_div {
@@ -169,6 +175,9 @@
     margin: 10px 20px 10px 10px;
 }
 
+#tabs {
+}
+
 .tab-content {
     background: white;
     border: 2px solid #a1a1a1;
@@ -176,6 +185,9 @@
     border-radius: 5px;
     margin: -10px 10px 10px 10px;
     background-color: white;
+}
+
+.tab-pane {
 }
 
 .pdf_object {
@@ -189,4 +201,19 @@
 
 #process_button {
     margin-top: 0px;
+}
+
+.cd-popup-trigger {
+  display: block;
+  width: 60px;
+  margin-right: 0px;
+  height: 12px;
+  text-align: center;
+  color: #FFF;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  border-radius: 50em;
+  background: #35a785;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
 }

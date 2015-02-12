@@ -34,6 +34,7 @@ class MRIInputHandler(object):
             Input dimensionality and the location of the variance map file.
         """
 
+        assert "dataset_name" in hyperparams.keys(), hyperparams
         dataset_name = hyperparams["dataset_name"]
         data_class = hyperparams["data_class"]
         variance_normalize = hyperparams.get("variance_normalize", False)

@@ -1,5 +1,5 @@
 """
-Module for handling jobman
+Module for handling jobman experiments
 """
 
 import argparse
@@ -7,6 +7,10 @@ from pl2mind import experiments
 
 
 def make_argument_parser():
+    """
+    Make argument parser for jobmind.
+    """
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("user")
@@ -28,10 +32,11 @@ def make_argument_parser():
 
     run_parser = subparsers.add_parser("run")
     run_parser.set_defaults(which="run")
-    run_parser.add_argument("--n_proc", type=int, default=1)
+    run_parser.add_argument("--n_proc", type=int, default=1,
+                            help="Number of processors.")
 
     clear_parser = subparsers.add_parser("clear")
-    clear_parser.set_defaults(which="clear")
+    clear_parser.set_defaults(which="clear", help="Clear the table.")
 
     return parser
 
@@ -49,7 +54,7 @@ def main():
         if args.n_proc > 1:
             experiments.run_jobman_from_sql(args)
         else:
-            experiments.run_jobman(args)
+            experiments.run_one_jobman(args)
 
     elif args.which == "clear":
         experiments.clear_jobman(args)

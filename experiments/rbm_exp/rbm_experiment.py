@@ -7,7 +7,6 @@ from os import path
 
 from pl2mind.tools import mri_analysis
 
-import numpy as np
 
 # YAML template for the experiment.
 yaml_file = path.join(path.abspath(path.dirname(__file__)), "rbm.yaml")

@@ -1,7 +1,4 @@
-$(document).ready(function() {
-    var port;
-
-    function makeModal() {
+    function makeModal(wd, port) {
 	var modal_fade = document.createElement("div");
 	modal_fade.id = "confirmModal";
 	modal_fade.className = "modal fade";
@@ -56,7 +53,7 @@ $(document).ready(function() {
 	    if (this.className == "live-trigger long-trigger") {
 		this.innerHTML = "LIVE";
 		this.className = "live-trigger long-trigger live-on";
-		periodicUpdate();
+		periodicUpdate(wd);
 	    } else {
 		this.innerHTML = "GO-LIVE";
 		this.className = "live-trigger long-trigger";
@@ -83,7 +80,7 @@ $(document).ready(function() {
 			    $(trigger).addClass("is-hidden");
 			}
 			trigger.innerHTML = "STOP";
-			updateAll();
+			updateAll(wd);
 		    },
 		    error: function(xhr, status, error) {
 			var err = eval("(" + xhr.responseText + ")");
@@ -110,7 +107,7 @@ $(document).ready(function() {
 		    contentType: "application/json",
 		    timeout: 1000000,
 		    complete: function() {
-			updateAll();
+			updateAll(wd);
 		    },
 		    success: function(data) {
 			console.log("Got " + data.response);
@@ -121,7 +118,7 @@ $(document).ready(function() {
 			} else {
 			    trigger.innerHTML = "Failed";
 			}
-			updateAll();
+			updateAll(wd);
 			trigger.className = "process-trigger";
 		    },
 		    error: function(xhr, status, error) {
@@ -234,7 +231,7 @@ $(document).ready(function() {
 	return li;
     }
 
-    function makeLayout(json) {
+    function makeLayout(body, json, wd) {
 	// Makes the basic layout as defined by the JSON file.
 	var stats = json.stats;
 	var logs = json.logs;
@@ -242,6 +239,7 @@ $(document).ready(function() {
 	var hyperparams = json.hyperparams;
 	var name = json.name;
 	var results = json.outputs;
+	var port = stats.port;
 
 	var extras = [];
 	for (var log_group in logs) {
@@ -251,7 +249,6 @@ $(document).ready(function() {
 	    }
 	}
 
-	var body = document.getElementsByTagName("body")[0];
 	var title_div = document.createElement("div");
 	title_div.id = "title_div";
 	var title = document.createElement("h1");
@@ -294,7 +291,7 @@ $(document).ready(function() {
 	tab_div.appendChild(ul);
 	var primary_tab = makeTab("primary", "Primary Stats", true);
 	ul.appendChild(primary_tab);
-	var secondary_tab = makeTab("secondary", "Seconary Stats", false);
+	var secondary_tab = makeTab("secondary", "Secondary Stats", false);
 	ul.appendChild(secondary_tab);
 
 	for (var result in results) {
@@ -327,18 +324,19 @@ $(document).ready(function() {
 	}
 
 	makeButtons();
-	var modal = makeModal();
+	var modal = makeModal(wd, port);
 	body.appendChild(modal);
     }
 
-    function updatePdf(result, location) {
+    function updatePdf(result, location, wd) {
 	var pdf_object = document.createElement("object");
 	pdf_object.className = "pdf_object";
-	pdf_object.data = location;
+
+	pdf_object.data = wd + "/" + location;
 	pdf_object.type = "application/pdf";
 	var pdf_div = $("#" + result).children()[0];
 	$.ajax({
-	    url: location,
+	    url: wd + "/" +  location,
 	    type: "GET",
 	    success: function(d) {
 		$(pdf_div).replaceWith(pdf_object);
@@ -352,7 +350,7 @@ $(document).ready(function() {
 	});
     }
 
-    function updateFromJSON(json) {
+    function updateFromJSON(json, wd) {
 	console.log("Updating from json");
 	// Update the elements from the JSON file.
 	var stats = json.stats;
@@ -362,7 +360,6 @@ $(document).ready(function() {
 	var name = json.name;
 	var results = json.outputs;
 	var processing = json.processing;
-	port = stats.port;
 	var last_processed = json.last_processed;
 
 	function updateInfo(info, info_div) {
@@ -475,7 +472,7 @@ $(document).ready(function() {
 	}
 
 	for (var result in results) {
-	    updatePdf(result, results[result]);
+	    updatePdf(result, results[result], wd);
 	}
 
 	updateButtons(processing, last_processed);
@@ -516,24 +513,24 @@ $(document).ready(function() {
 	    "Last processed: " + last_processed;
     }
 
-    function setLayout() {
+    function setLayout(body, wd) {
 	$.ajax({
-	    url: "model.json",
+	    url: wd + "/model.json",
 	    type: "GET",
 	    dataType: "json",
 	    success: function (json) {
-		makeLayout(json);
+		makeLayout(body, json, wd);
 	    }
 	});
     }
 
-    function updateAll() {
+    function updateAll(wd) {
 	$.ajax({
-	    url: "model.json",
+	    url: wd + "/model.json",
 	    type: "GET",
 	    dataType: "json",
 	    success: function (json) {
-		updateFromJSON(json);
+		updateFromJSON(json, wd);
 		var now = new Date();
 		var last_updated = document.getElementById("last_updated");
 		last_updated.innerHTML = now;
@@ -541,14 +538,14 @@ $(document).ready(function() {
 	});
     }
 
-    function periodicUpdate() {
+    function periodicUpdate(wd) {
 	console.log("Loading ajax");
 	$.ajax({
-	    url: "model.json",
+	    url: wd + "/model.json",
 	    type: "GET",
 	    dataType: "json",
 	    success: function (json) {
-		updateFromJSON(json);
+		updateFromJSON(json, wd);
 		var now = new Date();
 		var last_updated = document.getElementById("last_updated");
 		last_updated.innerHTML = "(Last updated: " + now + ")";
@@ -563,6 +560,3 @@ $(document).ready(function() {
 	    }
 	});
     };
-    setLayout();
-    periodicUpdate();
-});

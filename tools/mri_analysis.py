@@ -35,6 +35,8 @@ from pylearn2.utils import sharedX
 from scipy.stats import ttest_1samp
 from scipy.stats import ttest_ind
 import sys
+import theano.tensor as T
+
 import warnings
 
 
@@ -316,13 +318,42 @@ def get_features(model, zscore=True, transposed_features=False,
     if isinstance(model, VAE):
         if transposed_features:
             raise NotImplementedError()
-        Y = sharedX(np.zeros((model.nhid, model.nhid)))
-        theta_mean = model.decode_theta(Y)
-        mean_features = model.means_from_theta(theta_mean).eval()
+        means = model.prior.prior_mu.get_value()
+        sigmas = np.exp(model.prior.log_prior_sigma.get_value())
+        means_matrix = np.zeros((model.nhid, model.nhid))
+        sigmas_matrix = np.zeros((model.nhid, model.nhid))
+        idx = np.argsort(sigmas).tolist()[::-1]
 
-        Z = sharedX(np.eye(model.nhid) * 10)
-        theta = model.decode_theta(Z)
-        features = model.means_from_theta(theta).eval() - mean_features
+        for i, j in enumerate(idx):
+            means_matrix[i] = means[idx]
+            sigmas_matrix[i, j] = sigmas[j]
+
+        Y = sharedX(means_matrix)
+        theta0 = model.decode_theta(Y)
+        mu0, log_sigma0 = theta0
+
+        Z = sharedX(means_matrix + 2 * sigmas_matrix)
+        theta1 = model.decode_theta(Z)
+        mu1, log_sigma1 = theta1
+        #features = (mu1.eval() - mu0.eval()) / np.exp(log_sigma0.eval())
+        features = 1 - (0.5 * (1 + T.erf((mu0 - mu1) / (
+            T.exp(log_sigma1) * sqrt(2))))).eval()
+        #features = features / (1 - features)
+
+        #mean_features = 1 - (0.5 * (1 + T.erf((1 - mu0) / (
+        #    T.exp(log_sigma0) * sqrt(2))))).eval()
+        #mean_features = mean_features / (1 - mean_features)
+
+        #features = features * (1 - mean_features)
+        #features = features - mean_features
+
+        if feature_dict is not None:
+            assert feature_dict == {}
+            for i, j in enumerate(idx):
+                feature_dict[i] = {"real_id": j}
+            load_feature_dict(feature_dict, sigmas, "s")
+            load_feature_dict(feature_dict, means, "m")
+
     elif isinstance(model, NICE):
         logger.info("NICE layers: %r" % model.encoder.layers)
         S = model.encoder.layers[-1].D.get_value()
@@ -339,7 +370,8 @@ def get_features(model, zscore=True, transposed_features=False,
 
         if transposed_features:
             if dataset is None:
-                raise ValueError("Must provide a dataset to transpose features (None provided)")
+                raise ValueError("Must provide a dataset to transpose features"
+                                 " (None provided)")
             data = dataset.get_design_matrix()
             X = sharedX(data)
             features = model.encode(X).T.eval()[idx]
@@ -366,9 +398,9 @@ def get_features(model, zscore=True, transposed_features=False,
         if weights_format[0] == 'v':
             features = features.T
 
-    if (features > features.mean() + 10 * features.std()).sum() > 1:
+    if (features > features.mean() + 5 * features.std()).sum() > 1:
         logger.warn("Founds some spurious voxels. Don't know why they exist, but setting to 0.")
-        features[features > features.mean() + 10 * features.std()] = 0
+        features[features > features.mean() + 5 * features.std()] = 0
 
     return features
 
@@ -500,5 +532,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.verbose:
         logger.setLevel(logging.DEBUG)
-    main(args.model_path, args.out_path, args.target_stat, args.zscore, args.prefix,
+    main(args.model_path, args.out_dir, args.target_stat, args.zscore, args.prefix,
          args.dataset_root)

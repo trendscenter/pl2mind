@@ -5,7 +5,9 @@ Module for managing experiments.
 import matplotlib
 matplotlib.use("Agg")
 
+import ast
 import copy
+from cStringIO import StringIO
 import datetime
 import glob
 import imp
@@ -40,10 +42,24 @@ import time
 import zmq
 
 
+class MetaLogHandler(object):
+    """
+    Handler for module logs.
+    Adds logs to LogHandler dictionary d.
+    TODO: add stdout and/or stderr.
+    """
+    def __init__(self, d):
+        self.__dict__.update(locals())
+
+    def write(self, message):
+        self.d["log_stream"] += message
+
+
 class LogHandler(object):
     """
     Class that hijacks the Pylearn2 monitor logs and outputs json.
     Saves to out_path/model.json.
+    TODO: kwarg all of these arguments.
 
     Parameters
     ----------
@@ -65,11 +81,15 @@ class LogHandler(object):
         Port the socket is listening on.
     last_processed: mp.Manager.dict
         Shared float when model was last processed
+    dbdescr: str, optional
+        Database descritiption string.
+    job_id: int, optional
+        Job id.
     """
 
     def __init__(self, experiment, hyperparams,
                  out_path, pid, processing_flag,
-                 mem, cpu, port, last_processed):
+                 mem, cpu, port, last_processed, dbdescr=None, job_id=None):
         self.__dict__.update(locals())
         self.on = False
         self.channels = []
@@ -100,8 +120,47 @@ class LogHandler(object):
             "logs": {
                 "cpu": {"cpu": []},
                 "mem": {"mem": []}
-                }
+                },
+            "log_stream": ""
             }
+
+
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+        h = logging.StreamHandler(MetaLogHandler(self.d))
+        self.logger.addHandler(h)
+
+    def update_db(self):
+        """
+        Update the postgresql database with results.
+        """
+
+        if self.dbdescr == None:
+            return
+        assert self.job_id is not None
+        db = api0.open_db(self.dbdescr)
+        j = db.get(self.job_id)
+        for key, value in self.d["logs"].iteritems():
+            if key in ["cpu", "mem"]:
+                j[translate_string("stats.%s" % key, "knex")] = value[key][-1]
+            else:
+                for channel, channel_value in value.iteritems():
+                    if len(channel_value) > 0:
+                        j[translate_string("results.%s" % channel, "knex")] =\
+                            channel_value[-1]
+        for stat in self.d["stats"]:
+            j[translate_string("stats.%s" % stat, "knex")] =\
+                self.d["stats"][stat]
+        status = self.d["stats"]["status"]
+
+        if status in ["STARTING", "RUNNING (afaik)"]:
+            j["jobman.status"] = 1
+        elif status == "KILLED":
+            j["jobman.status"] = -1
+        elif status == "COMPLETED":
+            j["jobman.status"] = 2
+        table = self.dbdescr.split("table=",1)[1]
+        db.createView("%s" % table)
 
     def finish(self, status):
         """
@@ -115,7 +174,10 @@ class LogHandler(object):
         self.d["stats"]["status"] = status
         self.d["stats"]["stopped_time"] = datetime.datetime.now().strftime(
             "%Y-%m-%d %H:%M:%S")
+        self.d["logs"]["cpu"]["cpu"].append(0)
+        self.d["logs"]["mem"]["mem"].append(0)
         self.write_json()
+        self.update_db()
 
     def get_stats(self):
         """
@@ -141,6 +203,7 @@ class LogHandler(object):
         if self.d["processing"]:
             self.d["last_processed"] = self.last_processed["value"] +\
                 " (epoch %d)" % len(self.d["logs"]["cpu"]["cpu"])
+        self.update_db()
 
     def compile_channels(self):
         """
@@ -185,7 +248,7 @@ class LogHandler(object):
             self.d["logs"][group] = {}
             for channel in channels:
                 self.d["logs"][group][channel] = []
-        print self.d["logs"]
+        self.logger.info(self.d["logs"])
 
     def add_value(self, channel, value):
         """
@@ -315,30 +378,39 @@ class StatProcessor(mp.Process):
     cpu: mp.Value
         Shared integer with log handler.
     """
-    def __init__(self, pid, mem, cpu):
+    def __init__(self, pid, mem, cpu, logger, length=100):
         self.__dict__.update(locals())
         self.cpus = []
         self.mems = []
+        self.br = False
         super(StatProcessor, self).__init__()
 
     def run(self):
         p = psutil.Process(self.pid);
-        while True:
+
+        def sig_handler(signum, frame):
+            self.br = True
+            return
+
+        signal.signal(signal.SIGTERM, sig_handler)
+
+        while not self.br:
             time.sleep(1);
-            if len(self.cpus) == 100:
+            if len(self.cpus) == self.length:
                 self.cpus.pop(0)
-            elif len(self.cpus) > 100:
+            elif len(self.cpus) > self.length:
                 raise ValueError()
             self.cpus.append(p.get_cpu_percent())
 
             self.cpu.value = np.mean(self.cpus)
 
-            if len(self.mems) == 100:
+            if len(self.mems) == self.length:
                 self.mems.pop(0)
-            elif len(self.mems) > 100:
+            elif len(self.mems) > self.length:
                 raise ValueError()
             self.mems.append(p.get_memory_percent())
             self.mem.value = np.mean(self.mems)
+        self.logger.info("Dying... ugh")
 
 
 def server(pid, ep):
@@ -356,6 +428,13 @@ def server(pid, ep):
     socket = context.socket(zmq.REP)
     port = socket.bind_to_random_port("tcp://0.0.0.0")
     ep.send(port)
+
+    def sig_handler(signum, frame):
+        socket.close()
+        return
+
+    signal.signal(signal.SIGTERM, sig_handler)
+
     while True:
         message = socket.recv()
         if message == "KILL":
@@ -392,7 +471,8 @@ def set_hyper_parameters(hyper_parameters, **kwargs):
             if split_keys[-1] in entry:
                 entry[split_keys[-1]] = value
 
-def run_experiment(experiment, hyper_parameters = None, **kwargs):
+def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
+                   dbdescr=None, job_id=None, **kwargs):
     """
     Experiment function.
     Used by jobman to run jobs. Must be loaded externally.
@@ -414,6 +494,10 @@ def run_experiment(experiment, hyper_parameters = None, **kwargs):
     file_parameters = experiment.fileparams
     set_hyper_parameters(file_parameters, **kwargs)
     hyper_parameters.update(file_parameters)
+
+    # HACK TODO: fix this. For some reason knex formatted strings are sometimes
+    # Getting in.
+    hyper_parameters = translate(hyper_parameters, "pylearn2")
 
     # Use the input hander to get input information.
     ih = input_handler.MRIInputHandler()
@@ -449,7 +533,7 @@ def run_experiment(experiment, hyper_parameters = None, **kwargs):
         os.makedirs(out_path)
 
     # If any pdfs are in out_path, kill or quit
-    if len(glob.glob(path.join(out_path, "*.pdf"))) > 0:
+    if ask and len(glob.glob(path.join(out_path, "*.pdf"))) > 0:
         print ("Results found in %s "
                "Proceeding will erase." % out_path)
         command = None
@@ -469,7 +553,7 @@ def run_experiment(experiment, hyper_parameters = None, **kwargs):
     hyper_parameters = expand(flatten(hyper_parameters), dict_type=ydict)
     yaml_template = open(experiment.yaml_file).read()
     yaml = yaml_template % hyper_parameters
-    print yaml
+
     train_object = yaml_parse.load(yaml)
 
     # Set up subprocesses and log handler.
@@ -477,7 +561,6 @@ def run_experiment(experiment, hyper_parameters = None, **kwargs):
     p = mp.Process(target=server, args=(pid, s_ep))
     p.start()
     port = mp_ep.recv()
-    print "Listening on port %d" % port
 
     processing_flag = mp.Value("b", False)
     mem = mp.Value("f", 0.0)
@@ -486,35 +569,67 @@ def run_experiment(experiment, hyper_parameters = None, **kwargs):
     last_processed["value"] = "Never"
 
     lh = LogHandler(experiment, hyper_parameters, out_path,
-                    pid, processing_flag, mem, cpu, port, last_processed)
+                    pid, processing_flag, mem, cpu, port, last_processed,
+                    dbdescr, job_id)
     h = logging.StreamHandler(lh)
     monitor.log.addHandler(h)
+
+    lh.logger.info(yaml)
+    lh.logger.info("Listening on port %d" % port)
+
 
     model_processor = ModelProcessor(experiment, train_object.save_path,
                                      mp_ep, processing_flag, last_processed)
     model_processor.start()
-    stat_processor = StatProcessor(pid, mem, cpu)
+    stat_processor = StatProcessor(pid, mem, cpu, lh.logger)
     stat_processor.start()
+
+    # Clean the model after running
+    def clean():
+        p.terminate()
+        lh.logger.info("waiting for server...")
+        p.join()
+        model_processor.terminate()
+        lh.logger.info("waiting for model processor...")
+        model_processor.join()
+        stat_processor.terminate()
+        lh.logger.info("waiting for stat processor...")
+        stat_processor.join()
+
+        try:
+            os.remove(model_processor.best_checkpoint)
+        except:
+            pass
+        try:
+            os.remove(model_processor.checkpoint)
+        except:
+            pass
 
     # A signal handler so processes kill cleanly.
     def signal_handler(signum, frame):
-        print("Quitting...")
+        lh.logger.info("Forced quitting...")
+        clean()
         lh.finish("KILLED")
-        p.terminate()
-        stat_processor.terminate()
-        model_processor.terminate()
-        exit()
+        if dbdescr is None:
+            exit()
+        else:
+            raise ValueError("KILLED")
 
     signal.signal(signal.SIGINT, signal_handler)
 
     # Main loop.
-    train_object.main_loop()
+    try:
+        train_object.main_loop()
+    except Exception as e:
+        lh.logger.error(e)
+        clean()
+        lh.finish("FAILED")
+        raise(e)
+
     lh.finish("COMPLETED")
-    p.terminate()
-    model_processor.terminate()
-    stat_processor.terminate()
 
     # After complete, process model.
+    lh.logger.info("Processing...")
     try:
         experiment.analyze_fn(model_processor.best_checkpoint,
                                    model_processor.out_path)
@@ -524,22 +639,18 @@ def run_experiment(experiment, hyper_parameters = None, **kwargs):
                               model_processor.out_path)
         os.remove(model_processor.checkpoint)
     except Exception as e:
-        print (e)
+        lh.logger.error(e)
 
     # Clean checkpoints.
     # TODO(dhjelm): give option to keep checkpoints somewhere.
-    try:
-        os.remove(model_processor.best_checkpoint)
-    except:
-        pass
-    try:
-        os.remove(model_processor.checkpoint)
-    except:
-        pass
-
+    clean()
+    lh.logger.info("Finished experiment.")
     return
 
 def run_jobman_from_sql(jobargs):
+    """
+    Runs muliple jobs on postgresql database table.
+    """
     dbdescr = ("postgres://%(user)s@%(host)s:"
                "%(port)d/%(database)s?table=%(table)s"
                % {"user": jobargs.user,
@@ -556,6 +667,9 @@ def run_jobman_from_sql(jobargs):
     dbi.run()
 
 def run_one_jobman(jobargs):
+    """
+    Run a single job from postgresql database table.
+    """
     dbdescr = ("postgres://%(user)s@%(host)s:"
                "%(port)d/%(database)s?table=%(table)s"
                % {"user": jobargs.user,
@@ -573,6 +687,9 @@ def run_one_jobman(jobargs):
     runner_sql(options, dbdescr, expdir)
 
 def jobman_status(jobargs):
+    """
+    Print status of jobs in postgres database table.
+    """
     db = api0.open_db("postgres://%(user)s@%(host)s:"
                       "%(port)d/%(database)s?table=%(table)s"
                       % {"user": jobargs.user,
@@ -589,6 +706,9 @@ def jobman_status(jobargs):
             print "\t%s\t%r" % (k, job[k])
 
 def clear_jobman(jobargs):
+    """
+    Clear jobs in postgresql database table.
+    """
     db = api0.open_db("postgres://%(user)s@%(host)s:"
                       "%(port)d/%(database)s?table=%(table)s"
                       % {"user": jobargs.user,
@@ -600,38 +720,103 @@ def clear_jobman(jobargs):
     for job in db.__iter__():
         job.delete()
 
+def translate_string(s, to):
+    """
+    Translate strings from and to format that wont break in knex.
+    Knex interprets "." as "_" and removes "_" from keys.
+    """
+    if to == "knex":
+        rep = ["_", "&"]
+    elif to == "pylearn2":
+        rep = ["&", "_"]
+    else:
+        raise ValueError()
+    return s.replace(*rep)
+
+def translate(d, to):
+    """
+    Helper method to translate dict keys to and from knex format.
+    Knex interprets "." as "_" and removes "_" from keys.
+    """
+
+    def recursive_translate(rd, rep):
+        if not isinstance(rd, dict):
+            return
+        for k, v in rd.iteritems():
+            new_k = k.replace(*rep)
+            if new_k != k:
+                assert new_k not in rd
+                rd[new_k] = v
+                rd.pop(k)
+                k = new_k
+
+            recursive_translate(v, rep)
+
+    new_d = copy.deepcopy(d)
+    assert to in ["knex", "pylearn2"]
+    if to == "knex":
+        rep = ["_", "&"]
+    elif to == "pylearn2":
+        rep = ["&", "_"]
+    else:
+        raise ValueError()
+    recursive_translate(new_d, rep)
+    return new_d
+
 def load_experiments_jobman(experiment_module, jobargs):
-    db = api0.open_db("postgres://%(user)s@%(host)s:"
-                      "%(port)d/%(database)s?table=%(table)s"
-                      % {"user": jobargs.user,
-                         "host": jobargs.host,
-                         "port": jobargs.port,
-                         "database": jobargs.database,
-                         "table": jobargs.table,
-                         })
+    """
+    Load jobs from experiment onto postgresql database table.
+    """
+    dbdescr = ("postgres://%(user)s@%(host)s:"
+               "%(port)d/%(database)s?table=%(table)s"
+               % {"user": jobargs.user,
+                  "host": jobargs.host,
+                  "port": jobargs.port,
+                  "database": jobargs.database,
+                  "table": jobargs.table,
+                  })
+    db = api0.open_db(dbdescr)
 
     experiment = imp.load_source("module.name", experiment_module)
     for i, items in enumerate(experiment.generator):
         hyperparams = experiment.default_hyperparams
-
         state = DD()
         set_hyper_parameters(hyperparams, **dict((k, v) for k, v in items))
-        state.hyperparams = hyperparams
-        state.out_path = path.join(path.abspath(jobargs.out_path), "job_%d" % i)
-        state.experiment_module = path.abspath(experiment_module)
+        state.hyperparams = translate(hyperparams, "knex")
+        state["out&path"] = path.abspath(jobargs.out_path)
+        state["experiment&module"] = path.abspath(experiment_module)
+        state["dbdescr"] = dbdescr
 
         sql.insert_job(run_experiment_jobman,
                        flatten(state),
                        db)
+    db.createView("%s" % jobargs.table)
 
 def run_experiment_jobman(state, channel):
-    experiment_module = state.experiment_module
+    """
+    Main jobman experiment function, called by all jobs.
+    """
+    experiment_module = state["experiment&module"]
     experiment = imp.load_source("module.name", experiment_module)
 
     yaml_template = open(experiment.yaml_file).read()
-    hyperparams = expand(flatten(state.hyperparams), dict_type=ydict)
-    out_path = path.join(state.out_path)
+    hyperparams = expand(flatten(translate(state.hyperparams, "pylearn2")),
+                         dict_type=ydict)
 
-    run_experiment(experiment, hyperparams, out_path=out_path)
+    state["out&path"] = path.join(state["out&path"],
+                                  "job_%d" % state["jobman.id"])
+    channel.save()
+    out_path = path.join(state["out&path"])
+    try:
+        run_experiment(experiment, hyperparams, ask=False, out_path=out_path,
+                       dbdescr=state["dbdescr"], job_id=state["jobman.id"])
+    except ValueError as e:
+        if str(e) == "KILLED":
+            return channel.CANCELED
+        else:
+            return channel.ERR_RUN
+    except:
+        return channel.ERR_RUN
 
+    print "Ending experiment"
     return channel.COMPLETE

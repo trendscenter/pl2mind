@@ -11,7 +11,9 @@ from pl2mind.tools import jobman_generators as jg
 # Note all generators need to be within a nested_generator.
 generator = jg.nested_generator(
     jg.list_generator(
-        "weight_decay.coeffs", [[0.1], [0.01], [0.001], [0.0001]]))
+        "weight_decay.coeffs", [[0.1], [0.01], [0.001], [0.0001]]),
+    jg.float_generator("learning_rate", 4, 0.05, 0.1)
+    )
 
 # Define some other hyperparameters
 default_hyperparams["nhid"] = 50
