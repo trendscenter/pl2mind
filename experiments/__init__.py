@@ -89,7 +89,7 @@ class LogHandler(object):
     """
 
     def __init__(self, experiment, hyperparams,
-                 out_path, pid, processing_flag,
+                 out_path, yaml, pid, processing_flag,
                  mem, cpu, port, last_processed, dbdescr=None, job_id=None):
         self.__dict__.update(locals())
         self.on = False
@@ -100,6 +100,7 @@ class LogHandler(object):
         p = psutil.Process(self.pid)
         self.d = {
             "name": experiment.name,
+            "yaml": yaml,
             "results_of_interest": experiment.results_of_interest +\
                 ["cpu", "mem"],
             "outputs": dict((o, "%s.pdf" % o)
@@ -331,7 +332,8 @@ class ModelProcessor(mp.Process):
     flag: mp.Value
         Shared boolean to indicate to log handler that processor is running.
     """
-    def __init__(self, experiment, checkpoint, ep, flag, last_processed):
+    def __init__(self, experiment, checkpoint, ep,
+                 flag, last_processed, logger):
         self.__dict__.update(locals())
         self.socket = None
 
@@ -348,20 +350,22 @@ class ModelProcessor(mp.Process):
             message = self.ep.recv()
             if message is None:
                 return
-            print("Processing")
+            self.logger.info("Processing")
             self.flag.value = True
             try:
                 self.experiment.analyze_fn(self.best_checkpoint, self.out_path)
+                self.logger.info("Processing successful")
                 self.ep.send("SUCCESS")
                 self.last_processed["value"] = datetime.datetime.now().strftime(
                     "%Y-%m-%d %H:%M:%S")
             except IOError:
                 self.experiment.analyze_fn(self.checkpoint, self.out_path)
+                self.logger.info("Processing successful")
                 self.ep.send("SUCCESS")
                 self.last_processed["value"] = datetime.datetime.now().strftime(
                     "%Y-%m-%d %H:%M:%S")
             except Exception as e:
-                print (e)
+                self.logger.exception(e)
                 self.ep.send("FAILED")
             self.flag.value = False
 
@@ -411,7 +415,7 @@ class StatProcessor(mp.Process):
                 raise ValueError()
             self.mems.append(p.get_memory_percent())
             self.mem.value = np.mean(self.mems)
-        self.logger.info("Dying... ugh")
+        self.logger.info("Server is dying (This is good)")
 
 
 def server(pid, ep):
@@ -569,7 +573,7 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     last_processed = mp.Manager().dict()
     last_processed["value"] = "Never"
 
-    lh = LogHandler(experiment, hyper_parameters, out_path,
+    lh = LogHandler(experiment, hyper_parameters, out_path, yaml,
                     pid, processing_flag, mem, cpu, port, last_processed,
                     dbdescr, job_id)
     h = logging.StreamHandler(lh)
@@ -578,9 +582,9 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     lh.logger.info(yaml)
     lh.logger.info("Listening on port %d" % port)
 
-
     model_processor = ModelProcessor(experiment, train_object.save_path,
-                                     mp_ep, processing_flag, last_processed)
+                                     mp_ep, processing_flag, last_processed,
+                                     lh.logger)
     model_processor.start()
     stat_processor = StatProcessor(pid, mem, cpu, lh.logger)
     stat_processor.start()
@@ -598,9 +602,9 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         stat_processor.join()
 
         if keep:
-            hl.logger.info("Keeping checkpoints")
+            lh.logger.info("Keeping checkpoints")
         else:
-            hl.logger.info("Cleaning checkpoints")
+            lh.logger.info("Cleaning checkpoints")
             try:
                 os.remove(model_processor.best_checkpoint)
             except:
