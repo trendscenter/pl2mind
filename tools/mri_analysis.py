@@ -5,30 +5,34 @@ Note: fMRI support to be added in the future.
 
 import argparse
 import logging
+from math import log
+from math import sqrt
+
 import matplotlib
 matplotlib.use("Agg")
+from matplotlib import pyplot as plt
+
 import nipy
 import numpy as np
 import os
 from os import path
-from matplotlib import pyplot as plt
-from math import log
-from math import sqrt
 
-from pylearn2.config import yaml_parse
 from pl2mind.datasets import dataset_info
 from pl2mind.datasets import MRI as MRI_module
 from pl2mind.datasets.MRI import MRI
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI as MRI_old
 from pl2mind.datasets.MRI import MRI_Standard
 from pl2mind.datasets.MRI import MRI_Transposed
 from pl2mind.tools import ols
 from pl2mind.tools import rois
 from pl2mind.tools import nifti_viewer
 from pl2mind.tools import simtb_viewer
+
+from pylearn2.config import yaml_parse
+from pylearn2.datasets.transformer_dataset import TransformerDataset
 from pylearn2.models.dbm import DBM
 from pylearn2.models.dbm.dbm import RBM
 from pylearn2.models.vae import VAE
+from pylearn2.neuroimaging_utils.datasets.MRI import MRI as MRI_old
 from pylearn2.utils import serial
 from pylearn2.utils import sharedX
 
@@ -68,9 +72,20 @@ def get_activations(model, dataset):
     activations: numpy array-like
     """
 
+    if isinstance(dataset, TransformerDataset):
+        transformer = dataset.transformer
+        dataset = dataset.raw
+        logger.info("Found transformer of type %s" % type(transformer))
+    else:
+        transformer = None
+
     logger.info("Getting activations for model of type %s and model %s"
                 % (type(model), dataset.dataset_name))
     data = dataset.get_design_matrix()
+
+    if transformer is not None:
+        data = transformer.perform(data).eval()
+
     if isinstance(model, NICE):
         if isinstance(dataset, MRI_Transposed):
             top_layer = model.encoder.layers[-1]
@@ -202,6 +217,14 @@ def get_aod_info(dataset, activations):
     return target_ttests, novel_ttests
 
 def set_experiment_info(model, dataset, feature_dict):
+    if isinstance(dataset, TransformerDataset):
+        transformer = dataset.transformer
+        dataset = dataset.raw
+        logger.info("Found transformer of type %s. Returning (TODO)"
+                    % type(transformer))
+        return
+    else:
+        transformer = None
     logger.info("Finding experiment related analysis for model of type %r and dataset %s"
                 % (type(model), dataset.dataset_name))
     activations = get_activations(model, dataset)
@@ -298,8 +321,8 @@ def load_feature_dict(feature_dict, stat, stat_name):
 
     return feature_dict
 
-def get_features(model, zscore=True, transposed_features=False,
-                 dataset=None, feature_dict=None, max_features=100):
+def get_features(model, zscore=True, dataset=None, feature_dict=None,
+                 max_features=100):
     """
     Extracts the features given a number of model types.
     Included are special methods for VAE and NICE. Also if the data is transposed,
@@ -309,19 +332,35 @@ def get_features(model, zscore=True, transposed_features=False,
     ----------
     model: pylearn2 Model class.
         Model from which to extract features.
-    transposed_data: bool, optional.
-        Whether the model was trained in transpose.
     dataset: pylearn2 Dataset class.
         Dataset to process transposed features.
+    feature_dict: dict
+        Dictionary with feature number keys and stats as the values.
+    max_features: int, optional
+        maximum number of features to process.
 
     Returns
     -------
     features: array-like.
     """
+
+    if isinstance(dataset, TransformerDataset):
+        transformer = dataset.transformer
+        dataset = dataset.raw
+        logger.info("Found transformer of type %s" % type(transformer))
+    else:
+        transformer = None
+
+    if isinstance(dataset, MRI_Transposed):
+        transposed_features = True
+    else:
+        transposed_features = False
+
     logger.info("Getting features%s for model of type %r%s."
                 % (" (zscored)" if zscore else "",
                    type(model),
                    "(transposed data)" if transposed_features else ""))
+
     if isinstance(model, VAE):
         if transposed_features:
             raise NotImplementedError()
@@ -410,6 +449,16 @@ def get_features(model, zscore=True, transposed_features=False,
         if weights_format[0] == 'v':
             features = features.T
 
+    if transformer is not None:
+        if isinstance(transformer, RBM):
+            F = sharedX(features)
+            hidden_layer = transformer.hidden_layers[0]
+            features = hidden_layer.downward_message(F).eval()
+
+        else:
+            raise NotImplementedError("Back reconstruction of transformer %s "
+                                      "not implemented yet" % type(transformer))
+
     if (features > features.mean() + 5 * features.std()).sum() > 1:
         logger.warn("Founds some spurious voxels. Don't know why they exist, but setting to 0.")
         features[features > features.mean() + 5 * features.std()] = 0
@@ -425,14 +474,20 @@ def nice_spectrum(model):
     if not isinstance(model, NICE):
         raise NotImplementedError("No spectrum analysis available for %r" % type(model))
 
-    spectrum = model.encoder.layers[-1].D.get_value()
-    spectrum = np.sort(spectrum)
-    spectrum = np.exp(-spectrum)
+    top_layer = model.encoder.layers[-1]
+    if isinstance(top_layer, nice_mlp.Homothety):
+        S = top_layer.D.get_value()
+        spectrum = np.exp(-S)
+    elif isinstance(top_layer, nice_mlp.SigmaScaling):
+        spectrum = top_layer.S.get_value()
+    spectrum = -np.sort(-spectrum)
     return spectrum
 
 def resolve_dataset(model, dataset_root=None):
     """
     Resolves the full dataset from the model.
+    In most cases we want to use the full unshuffled dataset for analysis,
+    so we change the dataset class to use it here.
     """
 
     logger.info("Resolving full dataset from training set.")
@@ -488,10 +543,6 @@ def main(model, out_path=None, target_stat="", zscore=False,
 
     logger.info("Extracting dataset")
     dataset = resolve_dataset(model, dataset_root)
-    if isinstance(dataset, MRI_Transposed):
-        transposed_features = True
-    else:
-        transposed_features = False
 
     feature_dict = {}
 
@@ -503,12 +554,17 @@ def main(model, out_path=None, target_stat="", zscore=False,
         f.savefig(spectrum_path)
 
     logger.info("Getting features")
-    features = get_features(model, zscore, transposed_features,
-                            dataset, feature_dict=feature_dict)
+    features = get_features(model, zscore, dataset, feature_dict=feature_dict)
     set_experiment_info(model, dataset, feature_dict)
 
-
     pdf_path = path.join(out_path, montage_prefix + ".pdf")
+
+    if isinstance(dataset, TransformerDataset):
+        transformer = dataset.transformer
+        dataset = dataset.raw
+    else:
+        transformer = None
+
     if dataset.dataset_name in dataset_info.simtb_datasets:
         save_simtb_montage(dataset, features, pdf_path,
                            feature_dict=feature_dict,

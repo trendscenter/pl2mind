@@ -38,6 +38,10 @@ def make_argument_parser():
     clear_parser = subparsers.add_parser("clear")
     clear_parser.set_defaults(which="clear", help="Clear the table.")
 
+    set_status = subparsers.add_parser("set_status")
+    set_status.set_defaults(which="set_status")
+    set_status.add_argument("job_id")
+
     return parser
 
 def main():
@@ -58,6 +62,9 @@ def main():
 
     elif args.which == "clear":
         experiments.clear_jobman(args)
+
+    elif args.which == "set_status":
+        experiments.set_status_jobman(args)
 
 if __name__ == "__main__":
     main()

@@ -4,7 +4,6 @@ TODO: handle functional aspects for fMRI here.
 """
 
 import functools
-import logging
 from nipy import load_image
 from nipy.core.api import Image
 import numpy as np
@@ -16,6 +15,7 @@ from pylearn2.datasets import Dataset
 from pylearn2.datasets import dense_design_matrix
 
 from pl2mind.datasets import dataset_info
+from pl2mind.logger import logger
 
 from pylearn2.space import CompositeSpace
 from pylearn2.utils import contains_nan
@@ -32,10 +32,6 @@ import sys
 import theano
 from theano import config
 import warnings
-
-
-logging.basicConfig(format="[%(levelname)s]:%(message)s")
-logger = logging.getLogger(__name__)
 
 
 class GaussianMRICorruptor(corruption.Corruptor):
@@ -823,8 +819,9 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
     Class for neuroimaging view converters. Takes account 3D.
     """
 
-    def __init__(self, shape, mask=None, axes=('b', 0, 1, 'c')):
-        self.mask = mask
+    def __init__(self, shape, source_matrix=None, mask=None, axes=('b', 0, 1, 'c')):
+        self.__dict__.update(locals())
+
         if self.mask is not None:
             if not mask.shape == shape:
                 raise ValueError("Mask shape (%r) does not fit data shape (%r)"
@@ -840,6 +837,9 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
         if len(design_matrix.shape) != 2:
             raise ValueError("design_matrix must have 2 dimensions, but shape "
                              "was %s." % str(design_matrix.shape))
+
+        if self.source_matrix is not None:
+            design_matrix = design_matrix.dot(self.source_matrix)
 
         expected_row_size = np.prod(self.shape)
         if self.mask is not None:
@@ -906,6 +906,9 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
                                                     for ax in ('b', 'c', 0, 1)])
             design_matrix = topo_array_bc01.reshape((topo_array.shape[0],
                                                      np.prod(topo_array.shape[1:])))
+
+        if self.source_matrix is not None:
+            design_matrix = self.source_matrix.dot(design_matrix)
 
         return design_matrix
 

@@ -14,8 +14,7 @@
   margin-right: 5px;
 }
 .popover {
-    overflow-x: auto;
-    width: 300px;
+    width: auto;
     height: 300px;
     margin-top: 100px; /* adjust popover position */
     overflow-y: scroll;
@@ -32,12 +31,13 @@
     overflow-y: scroll;
 }
 
-.modal-dialog.large {
-    width: 80%; /* respsonsive width */
+
+.modal-dialog {
+    width: 40%; /* respsonsive width */
 }
 
-.modal-dialog.small {
-    width: 40%; /* respsonsive width */
+.modal-dialog.large {
+    width: 80%; /* respsonsive width */
 }
 
 .param_div {
@@ -50,6 +50,10 @@
     display: inline-block;
     vertical-align: middle;
     padding: 0px 10px;
+}
+
+.info_title {
+    margin-bottom: 10px;
 }
 
 .plot_group_div {
@@ -117,35 +121,30 @@
     vertical-align: middle;
 }
 
-.process-trigger {
+.trigger {
     display: block;
-    width: 90px;
-    margin-top: 0px;
+    width: auto;
     margin-right: 0px;
     height: 18px;
+    padding-left: 5px;
+    padding-right: 5px;
     text-align: center;
     color: #FFF;
     font-size: 16px;
     font-weight: bold;
     text-transform: uppercase;
     border-radius: 50em;
-    background: #3C3;
+    background: #44D;
     box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
 }
 
-.kill-trigger {
-    display: block;
-    width: 60px;
-    margin-right: 0px;
-    height: 18px;
-    text-align: center;
-    color: #FFF;
-    font-size: 16px;
-    font-weight: bold;
-    text-transform: uppercase;
-    border-radius: 50em;
+#kill_trigger {
     background: #E88;
-    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
+}
+
+#process_trigger {
+    margin-top: 10px;
+    background: #3C3;
 }
 
 .live-trigger {
@@ -173,9 +172,13 @@
 
 #myTab {
     margin: 10px 20px 10px 10px;
+    height: auto;
+    width: auto;
 }
 
 #tabs {
+    height: auto;
+    width: auto;
 }
 
 .tab-content {
@@ -185,9 +188,12 @@
     border-radius: 5px;
     margin: -10px 10px 10px 10px;
     background-color: white;
+    height: auto;
+    width: auto;
 }
 
-.tab-pane {
+#stats_content {
+    height: auto;
 }
 
 .pdf_object {

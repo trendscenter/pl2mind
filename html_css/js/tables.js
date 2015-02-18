@@ -19,7 +19,7 @@ $(document).ready(function () {
 
 	var modal_content = document.createElement("div");
 	modal_content.className = "modal-content";
-	modal_content.id = "modal_content";
+	modal_content.id = "model_modal_content";
 	modal_dialog.appendChild(modal_content);
 
 	var modal_header = document.createElement("div");
@@ -65,6 +65,7 @@ $(document).ready(function () {
 
         for (var c = 0; c < empties; ++ c) {
             var th = document.createElement("th");
+	    th.className = "columnSelector-disable";
             head_tr.appendChild(th);
         }
 
@@ -150,7 +151,7 @@ $(document).ready(function () {
         a.innerHTML = "VIEW";
 
         $(a).on("click", function(){
-            var modal_content = document.getElementById("modal_content");
+            var modal_content = document.getElementById("model_modal_content");
             $.ajax({
                 url: elem["out_path"],
                 type: "GET",
@@ -181,7 +182,7 @@ $(document).ready(function () {
         b.innerHTML = "LOGS";
 
         $(b).on("click", function(){
-            var modal_content = document.getElementById("modal_content");
+            var modal_content = document.getElementById("model_modal_content");
             console.log(elem["out_path"] + "/model.json");
             $.ajax({
                 url: elem["out_path"] + "/model.json",
@@ -194,7 +195,9 @@ $(document).ready(function () {
                     var modal_body = document.createElement("div");
                     modal_body.className = "modal-body";
                     modal_content.appendChild(modal_body);
-                    modal_body.innerHTML = json["log_stream"];
+		    var pre = document.createElement("pre");
+                    pre.innerHTML = json["log_stream"];
+		    modal_body.appendChild(pre);
                 },
                 error: function() {
                     while (modal_content.firstChild) {

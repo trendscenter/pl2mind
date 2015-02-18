@@ -579,7 +579,6 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     h = logging.StreamHandler(lh)
     monitor.log.addHandler(h)
 
-    lh.logger.info(yaml)
     lh.logger.info("Listening on port %d" % port)
 
     model_processor = ModelProcessor(experiment, train_object.save_path,
@@ -635,8 +634,6 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         lh.finish("FAILED")
         raise(e)
 
-    lh.finish("COMPLETED")
-
     # After complete, process model.
     lh.logger.info("Processing...")
     try:
@@ -651,6 +648,7 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     # Clean checkpoints.
     clean()
     lh.logger.info("Finished experiment.")
+    lh.finish("COMPLETED")
     return
 
 def run_jobman_from_sql(jobargs):
@@ -710,6 +708,32 @@ def jobman_status(jobargs):
         print "Status: %d" % job.status
         for k in job.keys():
             print "\t%s\t%r" % (k, job[k])
+
+def open_db(jobargs):
+    dbdescr = ("postgres://%(user)s@%(host)s:"
+               "%(port)d/%(database)s?table=%(table)s"
+               % {"user": jobargs.user,
+                  "host": jobargs.host,
+                  "port": jobargs.port,
+                  "database": jobargs.database,
+                  "table": jobargs.table,
+                  })
+    db = api0.open_db(dbdescr)
+    return db
+
+def set_status_jobman(jobargs):
+    """
+    Sets status of jobs in postgres database table.
+    """
+
+    db = open_db(jobargs)
+    job_id = jobargs.job_id
+    if job_id.isdigit():
+        job = db.get(job_id)
+        job["jobman.status"] = 0
+    elif job_id == "ALL":
+        for job in db.__iter__():
+            job["jobman.status"] = 0
 
 def clear_jobman(jobargs):
     """
@@ -809,8 +833,9 @@ def run_experiment_jobman(state, channel):
     hyperparams = expand(flatten(translate(state.hyperparams, "pylearn2")),
                          dict_type=ydict)
 
-    state["out&path"] = path.join(state["out&path"],
-                                  "job_%d" % state["jobman.id"])
+    if not state["out&path"].endswith("job_%d" % state["jobman.id"]):
+        state["out&path"] = path.join(state["out&path"],
+                                      "job_%d" % state["jobman.id"])
     channel.save()
     out_path = path.join(state["out&path"])
     try:
