@@ -454,7 +454,8 @@ def get_features(model, zscore=True, dataset=None, feature_dict=None,
             F = sharedX(features)
             hidden_layer = transformer.hidden_layers[0]
             features = hidden_layer.downward_message(F).eval()
-
+        if isinstance(transformer, NICE):
+            raise NotImplementedError("NICE cannot back transform yet")
         else:
             raise NotImplementedError("Back reconstruction of transformer %s "
                                       "not implemented yet" % type(transformer))
