@@ -255,7 +255,7 @@ def load_simTB_data(source_directory):
         sim_dict[i] = {"SM": sms, "TC": tcs}
     sim_dict["params"] = params
 
-    data, labels = read_niftis(source_directory, nifti_files)
+    data, labels = read_niftis(nifti_files)
     return data, labels, sim_dict
 
 def is_simTBdir(source_directory):
