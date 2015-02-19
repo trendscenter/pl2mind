@@ -12,6 +12,7 @@
 #Don't track the image files:
 *.png
 *.jpg
+*.nii
 
 #Don't track mac file
 .DS_Store
