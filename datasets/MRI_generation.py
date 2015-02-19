@@ -12,6 +12,8 @@ from pl2mind.tools import ica
 from pylearn2.blocks import Block
 from pylearn2.datasets import Dataset
 from pylearn2.utils import contains_nan
+from pylearn2.utils.iteration import FiniteDatasetIterator
+from pylearn2.utils.iteration import resolve_iterator_class
 from pylearn2.utils.rng import make_theano_rng
 from pylearn2.utils import sharedX
 
@@ -150,7 +152,7 @@ class MRI_Generator(Block):
                                                  inputs.shape[0]],
                                   n_steps=16)
 
-        new_A = As[-1]
+        new_A = As[-1].T
 
         self.fn = theano.function([inputs], new_A.dot(self.sources))
 
@@ -251,9 +253,9 @@ class MRI_Gen(MRI.MRI):
 
         if process:
             self.A, self.S = ica.ica(X - X.mean(axis=0), num_components)
-        self.generator = MRI_Generator(
+        self.generator = [MRI_Generator(
             [np.histogram(a, density=True) for a in self.A.T],
-            self.S)
+            self.S), None]
         self.set_mri_topological_view(topo_view, mask)
         super(MRI_Gen, self).__init__(X=X, y=y)
 
