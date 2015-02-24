@@ -13,6 +13,7 @@
 *.png
 *.jpg
 *.nii
+*.pdf
 
 #Don't track mac file
 .DS_Store
