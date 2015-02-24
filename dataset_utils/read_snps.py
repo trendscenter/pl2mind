@@ -22,13 +22,62 @@ from pylearn2.utils import serial
 import sys
 import warnings
 
+
 logging.basicConfig(format="[%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
+
+def make_argument_parser():
+    """
+    Creates an ArgumentParser to read the options for this script from
+    sys.argv
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out", default="snp")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Show more verbosity!")
+
+    subparsers = parser.add_subparsers(help="sub-command help")
+    subparsers.required = True
+
+    compare_parser = subparsers.add_parser("compare",
+                                           help=("Compare 2 chromosome "
+                                                 "directories"))
+    compare_parser.set_defaults(which="compare")
+    compare_parser.add_argument("dir_1")
+    compare_parser.add_argument("dir_2")
+
+    extract_parser = subparsers.add_parser("extract")
+    extract_parser.set_defaults(which="extract")
+    extract_parser.add_argument("directory", help="SNP dataset directory.")
+    extract_parser.add_argument("out_dir",
+                                help="Output directory for Pylearn2 data.")
+    extract_parser.add_argument("-c", "--chromosomes", default=22,
+                                type=int,
+                                help="Number of chromosomes to process.")
+    extract_parser.add_argument("-u", "--use_snps", default=None,
+                                help="Reference dataset to use SNPs from.")
+    extract_parser.add_argument("-a", "--align_to", default=None)
+    extract_parser.add_argument("--nofill", action="store_true")
+    extract_parser.add_argument("-s", "--subjects_file", default=None,
+                                help="Subject file")
+    extract_parser.add_argument("--use_subjects", default=None,
+                                help="Subject file to align columns to")
+
+    separate_parser = subparsers.add_parser("separate",
+                                            help="Separate haps for GWA sim")
+    separate_parser.set_defaults(which="separate")
+    separate_parser.add_argument("chr_dir")
+    separate_parser.add_argument("labels")
+    separate_parser.add_argument("-s", "--separate_info", action="store_true")
+    separate_parser.add_argument("-t", "--transposed", action="store_true")
+
+    return parser
 
 def parse_bim_line(line):
     """
     Parse a bim line.
-    Format should be: chromosome SNP_name 0 location allele_1 allele_2. allele_1 != allele_2.
+    Format should be: chromosome SNP_name 0 location allele_1 allele_2.
+    allele_1 != allele_2.
 
     Parameters
     ----------
@@ -60,8 +109,8 @@ def parse_bim_line(line):
 def parse_haps_line(line):
     """
     Parse a haps line.
-    Format should be: chromosome SNP_name location minor(index) major(index) + subject data. Subject data
-    are pairs 00->0, 01->1, 10->1, 11->2
+    Format should be: chromosome SNP_name location minor(index) major(index)
+    + subject data. Subject data are pairs 00->0, 01->1, 10->1, 11->2
 
     Parameters
     ----------
@@ -81,12 +130,14 @@ def parse_haps_line(line):
         location = int(elems[2])
         minor = int(elems[3])
         major = int(elems[4])
-        assert (minor, major) in [(1, 2), (2, 1)], "Minor major error (%s)" % ((minor, major),)
+        assert (minor, major) in [(1, 2), (2, 1)], ("Minor major error (%s)"
+                                                    % ((minor, major),))
         values = np.zeros((len(elems) - 5) // 2, dtype=np.int8)
         for i in range(5, len(elems), 2):
             x = int(elems[i])
             y = int(elems[i+1])
-            assert (x, y) in [(0, 0), (0, 1), (1, 0), (1, 1)], "Value error (%s)" % ((x, y),)
+            assert (x, y) in [(0, 0), (0, 1), (1, 0), (1, 1)], (
+                "Value error (%s)" % ((x, y),))
             values[(i - 5) // 2] = x + y
     except AssertionError as e:
         raise ValueError("Could not parse haps line \"%s\" (%s)" % (line, e))
@@ -176,7 +227,8 @@ def parse_gen_line(line):
         for j in range(5, len(elems), 3):
             for i in range(j, j+3):
                 elems[i] = int(elems[i])
-            assert (sum(elems[j:j+3]) == 1), "Line segment value does not add to 1 (%d,%d,%d)" % elems[j:j+3]
+            assert (sum(elems[j:j+3]) == 1), ("Line segment value does not add"
+                                              " to 1 (%d,%d,%d)" % elems[j:j+3])
             values[(j - 5) / 3] = elems[j:j+3].index(1)
     except AssertionError as e:
         raise ValueError("Could not parse gen line \"%s\"(%s)" % (line, e))
@@ -187,8 +239,8 @@ def parse_gen_line(line):
 def parse_dat_file(dat_file):
     """
     Parse a complete dat file.
-    dat files are transposed wrt the rest of the data formats here. In addition, they only contain integer fields,
-    so we can use np.loadtxt.
+    dat files are transposed wrt the rest of the data formats here.
+    In addition, they only contain integer fields, so we can use np.loadtxt.
     First 6 columns are ignored.
     Note: must have a bims and info file to process completely.
 
@@ -224,7 +276,8 @@ def convert_dat_to_haps(data, info_dict):
     """
 
     assert info_dict["ext"] == "info"
-    assert (len(info_dict) - 1) == (data.shape[0] // 2), (len(info_dict), data.shape)
+    assert (len(info_dict) - 1) == (data.shape[0] // 2), (len(info_dict),
+                                                          data.shape)
 
     new_haps_dict = copy.deepcopy(info_dict)
     keys = [k for k in info_dict.keys() if k != "ext"]
@@ -235,8 +288,10 @@ def convert_dat_to_haps(data, info_dict):
         i = 2 * data_idx[j]
         assert i < data.shape[0], (i, data.shape[0])
         data_entry = data[i:i+2]
-        assert data_entry.shape[0] == 2,\
-            "data entry shape on SNP %s is %s (idx %d out of %d)" % (SNP_name, data_entry.shape, i, data.shape[0])
+        assert data_entry.shape[0] == 2, ("data entry shape on SNP %s is %s "
+                                          "(idx %d out of %d)"
+                                          % (SNP_name, data_entry.shape,
+                                             i, data.shape[0]))
         value_entry = data_entry.sum(axis=0) - 2
 
         assert SNP_name in new_haps_dict.keys(), SNP_name
@@ -247,11 +302,30 @@ def convert_dat_to_haps(data, info_dict):
 
     return new_haps_dict
 
+def parse_subjects_file(subjects_file):
+    """
+    Parse a bims or newline delimited file with subject information.
+    """
+    subjects_file = path.abspath(subjects_file)
+    logger.info("Parsing subject file %s" % subjects_file)
+
+    with open(subjects_file, "r") as f:
+        lines = f.readlines()
+        split_lines = [l.split(" ") for l in lines]
+        if len(split_lines[0]) == 1:
+            logger.warn("Assuming subject ids with M[0-9]+ format.")
+            subjects = [re.sub(r".*(M[0-9]+).*\n", r"\1", l[0])
+                        for l in split_lines]
+        else:
+            subjects = [l[1] for l in split_lines]
+    return subjects
+
 def parse_labels_file(label_file):
     """
     Parses a labels file.
-    Lables are single line with pairwise designations of controls vs cases. Space delimited.
-    e.g., 0 0 1 1 1 1 translates to [1, 0, 0], where 0 is for conrols and 1 is for cases.
+    Lables are single line with pairwise designations of controls vs cases.
+    Space delimited.  e.g., 0 0 1 1 1 1 translates to [1, 0, 0],
+    where 0 is for conrols and 1 is for cases.
 
     Parameters
     ----------
@@ -272,18 +346,22 @@ def parse_labels_file(label_file):
             assert len(elems) % 2 == 0, "Label line must have even elements."
             labels = []
             for i in range(0, len(elems), 2):
-                assert elems[i] == elems[i+1], "Can only read 1 1 (healthies) or 0 0 (schizophrenia)."
+                assert elems[i] == elems[i+1], ("Can only read 1 1 (healthies)"
+                                                " or 0 0 (schizophrenia).")
                 labels.append(elems[i])
         except AssertionError:
-            raise ValueError("Could not parse label line \"%s\"(%s)" % (line, e))
+            raise ValueError("Could not parse label line \"%s\"(%s)"
+                             % (line, e))
         except ValueError:
-            raise ValueError("Error with line %s, maybe there's an extra newline?" % line)
+            raise ValueError("Error with line %s, "
+                             "maybe there's an extra newline?" % line)
         return labels
 
     with open(label_file, "r") as f:
         lines = f.readlines()
         if len(lines) != 1:
-            raise ValueError("Could not read label file %s, only one line allowed, %d found"\
+            raise ValueError("Could not read label file %s, "
+                             "only one line allowed, %d found"\
                                  % (label_file, len(lines)))
         labels = read_line(lines[0])
 
@@ -317,7 +395,8 @@ def parse_file(file_name):
     if ext == "ped":
         return
     if ext not in exts:
-        raise NotImplementedError("Extension not supported (%s), must be in %s" % (ext, exts))
+        raise NotImplementedError("Extension not supported (%s), "
+                                  "must be in %s" % (ext, exts))
 
 
     method_dict = {
@@ -335,7 +414,8 @@ def parse_file(file_name):
             entry = method_dict[ext](line)
             entry[1]["line_number"] = i
             if entry[0] in parse_dict:
-                raise ValueError("Found a duplicate SNP(%s) in .%s file." % (entry[0], ext))
+                raise ValueError("Found a duplicate SNP(%s) in .%s file."
+                                 % (entry[0], ext))
             parse_dict[entry[0]] = entry[1]
     return parse_dict
 
@@ -371,8 +451,10 @@ def read_chr_directory(directory):
         info_keys = [k for k in info_dict.keys() if k != "ext"]
         bim_keys = [k for k in bim_dict.keys() if k != "ext"]
         if len(set(info_keys) - set(bim_keys)) != 0:
-            logger.warning("Fixing info %d -> %d. This is a hack" % (len(info_keys), len(bim_keys)))
-            assert len(set(bim_keys) - set(info_keys)) == 1, set(bim_keys) - set(info_keys)
+            logger.warning("Fixing info %d -> %d. This is a hack"
+                           % (len(info_keys), len(bim_keys)))
+            assert len(set(bim_keys) - set(info_keys)) == 1, (
+                set(bim_keys) - set(info_keys))
             new_info = {"ext": "info"}
             for k in bim_keys:
                 if k == "rsdummy":
@@ -401,7 +483,8 @@ def read_chr_directory(directory):
             if key == "rsdummy": continue
             if key == "ext": continue
 
-            minor, major = [(snp_dict["haps"][key])[m] for m in ["minor", "major"]]
+            minor, major = [(snp_dict["haps"][key])[m]
+                for m in ["minor", "major"]]
             minor_allele, major_allele = [(snp_dict["bim"][key])[m]
                                           for m in ["allele_1", "allele_2"]]
 
@@ -435,8 +518,10 @@ def parse_chr_directory(directory):
 
     # We need to ignore these files for now.
     ignore_strings = ["HAPGENinput", "input"]
-    files = [f for f in listdir(directory) if path.isfile(path.join(directory,f))]
-    files = [f for f in files if not any([ignore_string in f for ignore_string in ignore_strings])]
+    files = [f for f in listdir(directory)
+             if path.isfile(path.join(directory,f))]
+    files = [f for f in files
+             if not any(ignore_string in f for ignore_string in ignore_strings)]
     file_dict = {}
 
     def insert(ext, elem):
@@ -473,9 +558,11 @@ def parse_chr_directory(directory):
     else:
         for key in ["bim", "haps"]:
             if key not in file_dict and ("dat" not in file_dict):
-                raise ValueError("%s not found in %s (%s)" % (key, directory, file_dict))
+                raise ValueError("%s not found in %s (%s)"
+                                 % (key, directory, file_dict))
         if "tped" not in file_dict:
-            logger.warning("tped file not found in %s, process only with .haps" % directory)
+            logger.warning("tped file not found in %s, process only with .haps"
+                           % directory)
 
     if "dat" in file_dict:
         assert "info" in file_dict
@@ -489,7 +576,8 @@ def parse_dataset_directory(directory, chromosomes=22):
     subdirs = [d for d in listdir(directory) if path.isdir(path.join(directory,d))]
     dir_dict = {}
     for c in range(1, chromosomes + 1):
-        chr_dir = next((d for d in subdirs if d == "chr%d" % c or "chr%d_" % c in d), None)
+        chr_dir = next((d for d in subdirs
+                        if d == "chr%d" % c or "chr%d_" % c in d), None)
         if chr_dir is None:
             raise ValueError("Chromosome %d not found in %s" % (c, directory))
         dir_dict[c] = path.join(directory, chr_dir)
@@ -499,12 +587,12 @@ def parse_dataset_directory(directory, chromosomes=22):
     logger.info("Directory dictionary: %r" % dir_dict)
     return dir_dict
 
-def read_dataset_directory(directory, chromosomes=22,
-                           snps_reference=None, align_reference=None, nofill=False):
+def read_dataset_directory(args):
     """
     Reads a SNP dataset directory with multiple chromosomes.
-    Note: Directory must contrain subdirectories with names "chr%d" or chr%d_synthetic
-    which fit the chromosome directory specification in parse_chromosome_directory.
+    Note: Directory must contrain subdirectories with names "chr%d" or
+    chr%d_synthetic which fit the chromosome directory specification in
+    parse_chromosome_directory.
 
     Parameters
     ----------
@@ -518,9 +606,18 @@ def read_dataset_directory(directory, chromosomes=22,
     Returns
     -------
     dataset_dict: dict
-        Dictionary of chromosome or "labels" keys and file dictionary or labels values.
+        Dictionary of chromosome or "labels" keys and file dictionary or
+        labels values.
     """
-    logger.info("Reading %d chromosomes from directory %s" % (chromosomes, directory))
+
+    directory = args.directory
+    chromosomes = args.chromosomes
+    align_reference = args.align_to
+    snps_reference = args.use_snps
+    nofill = args.nofill
+
+    logger.info("Reading %d chromosomes from directory %s"
+                % (chromosomes, directory))
     dir_dict = parse_dataset_directory(directory, chromosomes=chromosomes)
     dataset_dict = {}
 
@@ -535,12 +632,13 @@ def read_dataset_directory(directory, chromosomes=22,
         for c in range(1, chromosomes + 1):
             assert "cases" in dataset_dict[c]
             assert "controls" in dataset_dict[c]
-            assert have_same_SNP_order(dataset_dict[c]["cases"], dataset_dict[c]["controls"])
+            assert have_same_SNP_order(dataset_dict[c]["cases"], (
+                dataset_dict[c]["controls"]))
 
     if snps_reference is not None:
         logger.info("Setting to snp reference")
-        snps_ref_dataset_dict, _, _ = read_dataset_directory(snps_reference,
-                                                             chromosomes=chromosomes)
+        snps_ref_dataset_dict, _, _ = read_dataset_directory(
+            snps_reference, chromosomes=chromosomes)
 
         for key in snps_ref_dataset_dict:
             if key == "labels":
@@ -562,15 +660,17 @@ def read_dataset_directory(directory, chromosomes=22,
             for ext in ["tped", "haps", "cases", "controls"]:
                 if ext not in chr_dict:
                     continue
-                data_dict = set_A_with_B(chr_dict[ext], snps_ref_chr_dict, nofill=nofill)
+                data_dict = set_A_with_B(chr_dict[ext], snps_ref_chr_dict,
+                                         nofill=nofill)
                 dataset_dict[key][ext] = data_dict
     else:
         snps_ref_dataset_dict = None
 
     if align_reference is not None:
         logger.info("Aligning")
-        align_ref_dataset_dict, _, _ = read_dataset_directory(align_reference,
-                                                           chromosomes=chromosomes)
+        align_ref_dataset_dict, _, _ = read_dataset_directory(
+            align_reference, chromosomes=chromosomes)
+
         for key in align_ref_dataset_dict:
             if key == "labels":
                 continue
@@ -596,13 +696,14 @@ def read_dataset_directory(directory, chromosomes=22,
 def pull_dataset(dataset_dict, chromosomes=22, shuffle=True):
     """
     Pull complete dataset from a dataset directory.
-    TODO: currently concatenates the data. Needs to save each chromosome dataset to a different
-    numpy file instead. Or return lists or dicts of array-likes
+    TODO: currently concatenates the data. Needs to save each chromosome dataset
+    to a different numpy file instead. Or return lists or dicts of array-likes
 
     Parameters
     ----------
     dataset_dict: dict
-        Dictionary of chromosome or "labels" keys and file dictionary or labels values.
+        Dictionary of chromosome or "labels" keys and file dictionary or
+        labels values.
 
     Returns
     -------
@@ -627,19 +728,22 @@ def pull_dataset(dataset_dict, chromosomes=22, shuffle=True):
                     num_cases = cases_data.shape[0]
                 if num_controls is None:
                     num_controls = controls_data.shape[0]
-                assert cases_data.shape[0] == num_cases,\
-                    "Cases data has inconsistent subjects (%d vs %d)"\
-                    % (cases_data.shape[0], num_cases)
-                assert controls_data.shape[0] == num_controls,\
-                    "Control data has inconsistent subjects (%d vs %d)"\
-                    % (control_data.shape[0], num_controls)
-                assert cases_data.shape[1] == controls_data.shape[1],\
-                    "Cases and controls have difference number of columns (%d vs %d)."\
-                    % (cases_data.shape[1], controls_data.shape[1])
-                data_dict[c] = np.concatenate((controls_data, cases_data), axis=0)
+                assert cases_data.shape[0] == num_cases, (
+                    "Cases data has inconsistent subjects (%d vs %d)"
+                    % (cases_data.shape[0], num_cases))
+                assert controls_data.shape[0] == num_controls, (
+                    "Control data has inconsistent subjects (%d vs %d)"
+                    % (control_data.shape[0], num_controls))
+                assert cases_data.shape[1] == controls_data.shape[1], (
+                    "Cases and controls have difference number of columns "
+                    "(%d vs %d)." % (cases_data.shape[1],
+                                     controls_data.shape[1]))
+                data_dict[c] = np.concatenate((controls_data,
+                                               cases_data), axis=0)
 
             except AssertionError as e:
-                raise ValueError("Pulling data from dataset chromosome %d failed (%s)" % (c, e))
+                raise ValueError("Pulling data from dataset chromosome %d "
+                                 "failed (%s)" % (c, e))
         labels = [0] * num_controls + [1] * num_cases
     else:
         data_dict = {}
@@ -715,7 +819,8 @@ def pull_tped_data(tped_dict, reference_names=None):
     data = np.zeros((samples, len(reference_names)), dtype=np.int8)
     for i, SNP_name in enumerate(reference_names):
         assert SNP_name != "ext"
-        minor, major = [tped_dict[SNP_name][m] for m in ["minor_allele", "major_allele"]]
+        minor, major = [tped_dict[SNP_name][m]
+                        for m in ["minor_allele", "major_allele"]]
         values = tped_dict[SNP_name]["values"]
 
         for j, value in enumerate(values):
@@ -795,7 +900,8 @@ def check_directory(dir_dict):
         reference_names = [k for k in dir_dict["tped"].keys() if k != "ext"]
         haps_data = pull_data(dir_dict["haps"], reference_names=reference_names)
         tped_data = pull_data(dir_dict["tped"], reference_names=reference_names)
-        assert np.all(haps_data == tped_data), "%r\n%r" % (haps_data.shape, tped_data.shape)
+        assert np.all(haps_data == tped_data), (
+            "%r\n%r" % (haps_data.shape, tped_data.shape))
         logger.info("haps and tped have the same data.")
 
 def compare_SNPs(file_A, file_B):
@@ -904,8 +1010,8 @@ def set_A_with_B(file_A, file_B, nofill=False):
         assert isinstance(file_B, dict)
         dict_B = file_B
 
-    SNPs_A = set([k for k in dict_A.keys() if k != "ext"])
-    SNPs_B = set([k for k in dict_B.keys() if k != "ext"])
+    SNPs_A = set(k for k in dict_A.keys() if k != "ext")
+    SNPs_B = set(k for k in dict_B.keys() if k != "ext")
     b_not_in_a = SNPs_B.difference(SNPs_A)
 
     if dict_A["ext"] in ["haps", "gen"]:
@@ -920,7 +1026,7 @@ def set_A_with_B(file_A, file_B, nofill=False):
             new_dict_A[SNP_name] = dict_A[SNP_name]
 
     if nofill:
-        SNPs_A = set([k for k in new_dict_A.keys() if k != "ext"])
+        SNPs_A = set(k for k in new_dict_A.keys() if k != "ext")
         a_not_in_b = SNPs_A.difference(SNPs_B)
         assert len(a_not_in_b) == 0
         return new_dict_A
@@ -935,23 +1041,26 @@ def set_A_with_B(file_A, file_B, nofill=False):
         assert SNP_name not in new_dict_A
         B_values = dict_B[SNP_name]["values"]
         if dict_B["ext"] in ["haps", "gen"]:
-            B_priors = [(B_values == i).sum(0) * 1. / B_values.shape[0] for i in range(3)]
+            B_priors = [(B_values == i).sum(0) * 1. / B_values.shape[0]
+                for i in range(3)]
         elif dict_B["ext"] == "tped":
             minor_allele, major_allele = (dict_B[SNP_name]["minor_allele"],
                                           dict_B[SNP_name]["major_allele"])
             allele_pairs = [[(minor_allele, minor_allele)],
-                            [(minor_allele, major_allele), (major_allele, minor_allele)],
+                            [(minor_allele, major_allele),
+                                (major_allele, minor_allele)],
                             [(major_allele, major_allele)]]
-            B_priors = np.array([sum([1 for b in B_values if b in pairs]) * 1. / len(B_values)
-                                 for pairs in allele_pairs])
+            B_priors = np.array(sum(1 for b in B_values
+                                    if b in pairs) * 1. / len(B_values)
+                                 for pairs in allele_pairs)
         else:
             raise ValueError("extension %s not supported" % B_dict["ext"])
         assert abs(B_priors.sum() - 1) < 10e-5, B_priors.sum()
 
         new_dict_A[SNP_name] = copy.copy(dict_B[SNP_name])
         if new_dict_A["ext"] in ["haps", "gen"]:
-            new_dict_A[SNP_name]["values"] = np.random.choice(range(3), size=value_shape[0],
-                                                              p=B_priors)
+            new_dict_A[SNP_name]["values"] = np.random.choice(
+                range(3), size=value_shape[0], p=B_priors)
         elif new_dict_A["ext"] == "tped":
             minor_allele, major_allele = (dict_B[SNP_name]["minor_allele"],
                                           dict_B[SNP_name]["major_allele"])
@@ -963,7 +1072,7 @@ def set_A_with_B(file_A, file_B, nofill=False):
                                       p=B_priors)
             new_dict_A[SNP_name]["values"] = [allele_pairs[i] for i in values]
 
-    SNPs_A = set([k for k in new_dict_A.keys() if k != "ext"])
+    SNPs_A = set(k for k in new_dict_A.keys() if k != "ext")
     b_not_in_a = SNPs_B.difference(SNPs_A)
     a_not_in_b = SNPs_A.difference(SNPs_B)
     assert len(b_not_in_a) == 0
@@ -974,7 +1083,8 @@ def set_A_with_B(file_A, file_B, nofill=False):
 def A_has_similar_priors_to_B(file_A, file_B):
     """
     Checks if file_A and file_B have similar priors.
-    Priors are similar if for P(i)_j for i in range(3) are within 15% for 95% of the SNPs j.
+    Priors are similar if for P(i)_j for i in range(3) are within 15% for 95%
+    of the SNPs j.
 
     Parameters
     ----------
@@ -1000,14 +1110,17 @@ def A_has_similar_priors_to_B(file_A, file_B):
         assert isinstance(file_B, dict)
         dict_B = file_B
 
-    reference_names = [k for k in dict_A.keys() if (k != "ext") and (k in dict_B.keys())]
+    reference_names = [k for k in dict_A.keys()
+                       if (k != "ext") and (k in dict_B.keys())]
 
     data_A = pull_data(dict_A, reference_names=reference_names)
     data_B = pull_data(dict_B, reference_names=reference_names)
     priors_A = [(data_A == i).sum(0) * 1. / data_A.shape[0] for i in range(3)]
     priors_B = [(data_B == i).sum(0) * 1. / data_B.shape[0] for i in range(3)]
-    assert np.allclose(priors_A[0] + priors_A[1] + priors_A[2], np.zeros(priors_A[0].shape) + 1)
-    assert np.allclose(priors_B[0] + priors_B[1] + priors_B[2], np.zeros(priors_B[0].shape) + 1)
+    assert np.allclose(priors_A[0] + priors_A[1] + priors_A[2],
+                       np.zeros(priors_A[0].shape) + 1)
+    assert np.allclose(priors_B[0] + priors_B[1] + priors_B[2],
+                       np.zeros(priors_B[0].shape) + 1)
     similar = True
     for i, (prior_A, prior_B) in enumerate(zip(priors_A, priors_B)):
         percent_off = (
@@ -1146,43 +1259,6 @@ def have_same_SNP_order(dict_A, dict_B):
     have_same_order = [k for k in dict_A.keys() if k != "ext"] == [k for k in dict_B.keys() if k != "ext"]
     return have_same_order
 
-def make_argument_parser():
-    """
-    Creates an ArgumentParser to read the options for this script from
-    sys.argv
-    """
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--out", default="snp")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show more verbosity!")
-
-    subparsers = parser.add_subparsers(help="sub-command help")
-    subparsers.required = True
-
-    compare_parser = subparsers.add_parser("compare", help="Compare 2 chromosome directories")
-    compare_parser.set_defaults(which="compare")
-    compare_parser.add_argument("dir_1")
-    compare_parser.add_argument("dir_2")
-
-    extract_parser = subparsers.add_parser("extract")
-    extract_parser.set_defaults(which="extract")
-    extract_parser.add_argument("directory", help="SNP dataset directory.")
-    extract_parser.add_argument("out_dir", help="Output directory for Pylearn2 data.")
-    extract_parser.add_argument("-c", "--chromosomes", default=22,
-                                type=int, help="Number of chromosomes to process.")
-    extract_parser.add_argument("-u", "--use_snps", default=None,
-                                help="Reference dataset to use SNPs from.")
-    extract_parser.add_argument("-a", "--align_to", default=None)
-    extract_parser.add_argument("--nofill", action="store_true")
-
-    separate_parser = subparsers.add_parser("separate", help="Separate haps for GWA sim")
-    separate_parser.set_defaults(which="separate")
-    separate_parser.add_argument("chr_dir")
-    separate_parser.add_argument("labels")
-    separate_parser.add_argument("-s", "--separate_info", action="store_true")
-    separate_parser.add_argument("-t", "--transposed", action="store_true")
-
-    return parser
-
 def save_snp_names(out_file, snp_list):
     with open(out_file, "w") as f:
         for snp in snp_list:
@@ -1310,11 +1386,7 @@ if __name__ == "__main__":
 
     elif args.which == "extract":
         data_dict, snp_ref_data_dict, ref_data_dict = read_dataset_directory(
-            args.directory,
-            chromosomes=args.chromosomes,
-            snps_reference=args.use_snps,
-            align_reference=args.align_to,
-            nofill=args.nofill)
+            args)
 
         if snp_ref_data_dict is not None:
             for key in data_dict:
@@ -1324,8 +1396,8 @@ if __name__ == "__main__":
                 snp_ref_chr_dict = get_dict(snp_ref_data_dict[key])
 
                 if args.nofill:
-                    data_snps = set([k for k in data_chr_dict if k != "ext"])
-                    snp_ref_snps = set([k for k in snp_ref_chr_dict if k != "ext"])
+                    data_snps = set(k for k in data_chr_dict if k != "ext")
+                    snp_ref_snps = set(k for k in snp_ref_chr_dict if k != "ext")
                     in_data_not_in_ref = data_snps - snp_ref_snps
                     assert len(in_data_not_in_ref) == 0, len(in_data_not_in_ref)
                     logger.info("Data now a strict subset of reference with %d SNPs" % len(data_snps))
@@ -1353,7 +1425,28 @@ if __name__ == "__main__":
 
                 assert A_has_similar_priors_to_B(data_dict[key][ext1],
                                                  ref_data_dict[key][ext2])
+
         data, labels = pull_dataset(data_dict, chromosomes=args.chromosomes)
+
+        subjects_file = args.subjects_file
+        use_subjects_file = args.use_subjects
+        if use_subjects_file is not None:
+            assert subjects_file is not None, ("Cannot use external subjects "
+                                               "file without knowing which "
+                                               "columns correspond to which "
+                                               "subjects.")
+            subjects = parse_subjects_file(subjects_file)
+            use_subjects = parse_subjects_file(use_subjects_file)
+            assert len(set(use_subjects) - set(subjects)) == 0, (subjects,
+                set(use_subjects) - set(subjects))
+            idx = [subjects.index(s) for s in use_subjects]
+            for c in data_dict:
+                if c == "labels":
+                    continue
+                assert len(subjects) == data[c].shape[0]
+                data[c] = data[c][idx]
+            labels = [labels[i] for i in idx]
+
         out_dir = serial.preprocess("${PYLEARN2_NI_PATH}/" + args.out_dir)
         assert path.isdir(out_dir), out_dir
         logger.info("Saving labels to %s" % out_dir)

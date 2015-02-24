@@ -27,6 +27,7 @@ from sys import stdout
 import warnings
 from pylearn2.utils import serial
 
+
 logging.basicConfig(format="[%(levelname)s]:%(message)s")
 logger = logging.getLogger(__name__)
 
@@ -42,14 +43,16 @@ def save_variance_map(dataset, save_path):
 
 def pull_niftis(source_directory, *args):
     """
-    Pull healthy and schizophrenia nitfi files from a source_directory. Uses glob to get multiple files.
+    Pull healthy and schizophrenia nitfi files from a source_directory.
+    Uses glob to get multiple files.
 
     Parameters
     ----------
     source_directory: string
         Source directory of nifti files.
     *args: list of strings or lists. optional
-        Either a string for use with glob or a list of files. If a string is passed, then the list of files
+        Either a string for use with glob or a list of files.
+        If a string is passed, then the list of files
         will be derived from glob.
 
     Returns
@@ -110,7 +113,7 @@ def read_niftis(file_lists):
     else:
         raise ValueError("Cannot parse data with dimensions %r" % data0.shape)
 
-    dt = (sum([len(fl) for fl in file_lists])) * t
+    dt = (sum(len(fl) for fl in file_lists)) * t
     data = np.zeros((dt, x, y, z))
 
     labels = [[i] * (len(fl) * t) for i, fl in enumerate(file_lists)]
@@ -119,7 +122,7 @@ def read_niftis(file_lists):
     for i, fl in enumerate(file_lists):
         assert len([j for j in labels if j == i]) == len(fl) * t
 
-    for i, f in enumerate([item for sublist in file_lists for item in sublist]):
+    for i, f in enumerate(item for sublist in file_lists for item in sublist):
         logger.info("Loading subject from file: %s%s" % (f, '' * 30))
 
         nifti = load_image(f)
@@ -130,7 +133,8 @@ def read_niftis(file_lists):
         elif len(subject_data.shape) == 4:
             data[i * t: (i + 1) * t] = subject_data.transpose((3, 0, 1, 2))
         else:
-            raise ValueError("Cannot parse subject data with dimensions %r" % subject_data.shape)
+            raise ValueError("Cannot parse subject data with dimensions %r"
+                             % subject_data.shape)
 
     logger.info("\rLoading subject from file: %s\n" % ('DONE' + " "*30))
     if data.shape[0] != len(labels):
@@ -139,7 +143,8 @@ def read_niftis(file_lists):
 
 def test_distribution(data, mask=None):
     logger.info("Testing distribution.")
-    data = data.reshape(data.shape[0], reduce(lambda x, y: x * y, data.shape[1:4]))
+    data = data.reshape(data.shape[0],
+                        reduce(lambda x, y: x * y, data.shape[1:4]))
     if mask is not None:
         mask_idx = np.where(mask.flatten() == 1)[0].tolist()
         data = data[:, mask_idx]
@@ -149,11 +154,14 @@ def test_distribution(data, mask=None):
     logger.info("Proportion voxels k <= -1: %.2f"
                 % (len(np.where(k <= -1)[0].tolist()) * 1. / data.shape[1]))
     logger.info("Proportion voxels -1 < k < 1: %.2f"
-                % (len(np.where(np.logical_and(k > -1, k < 1))[0].tolist()) * 1. / data.shape[1]))
+                % (len(np.where(np.logical_and(k > -1, k < 1))[0].tolist())
+                   * 1. / data.shape[1]))
     logger.info("Proportion voxels 1 < k < 2: %.2f"
-                % (len(np.where(np.logical_and(k >= 1, k < 2))[0].tolist()) * 1. / data.shape[1]))
+                % (len(np.where(np.logical_and(k >= 1, k < 2))[0].tolist())
+                   * 1. / data.shape[1]))
     logger.info("Proportion voxels 2 < k < 3: %.2f"
-                % (len(np.where(np.logical_and(k >= 2, k < 3))[0].tolist()) * 1. / data.shape[1]))
+                % (len(np.where(np.logical_and(k >= 2, k < 3))[0].tolist())
+                   * 1. / data.shape[1]))
     logger.info("Proportion voxels k >= 3: %.2f"
                 % (len(np.where(k >= 3)[0].tolist()) * 1. / data.shape[1]))
 
@@ -198,10 +206,12 @@ def split_save_data(data, labels, train_percentage, out_dir):
     np.save(path.join(out_dir, "full_labels_unshuffled.npy"), labels)
 
     np.save(path.join(out_dir, "train.npy"), data[train_idx])
-    np.save(path.join(out_dir, "train_labels.npy"), [labels[i] for i in train_idx])
+    np.save(path.join(out_dir, "train_labels.npy"),
+            [labels[i] for i in train_idx])
 
     np.save(path.join(out_dir, "test.npy"), data[test_idx])
-    np.save(path.join(out_dir, "test_labels.npy"), [labels[i] for i in test_idx])
+    np.save(path.join(out_dir, "test_labels.npy"),
+            [labels[i] for i in test_idx])
 
 def save_mask(data, out_dir):
     """
@@ -212,20 +222,24 @@ def save_mask(data, out_dir):
     m, r, c, d = data.shape
     mask = np.zeros((r, c, d))
 
-    zero_freq = (data.reshape((m, r * c * d)) == 0).sum(1) * 1. / reduce(lambda x, y: x * y, data.shape[1:4])
+    zero_freq = (data.reshape((m, r * c * d)) == 0).sum(1) * 1 / reduce(
+        lambda x, y: x * y, data.shape[1:4])
     if zero_freq.mean() > 0.2:
         logger.info("Masked data found, deriving zeros from data zeros.")
         for freq in zero_freq:
             assert isinstance(freq, float), freq
             if abs(zero_freq.mean() - freq) > .05:
-                raise ValueError("Spurious datapoint, mean zeros frequency is %.2f,"
-                                 "datapoint is %.2f" % (zero_freq.mean(), freq))
-        mask[np.where(np.invert((data < 0.07).sum(0) > .01 * data.shape[0]))] = 1
+                raise ValueError("Spurious datapoint, mean zeros frequency is"
+                                 "%.2f, datapoint is %.2f"
+                                 % (zero_freq.mean(), freq))
+        mask[np.where(np.invert((data < 0.07).sum(0) >
+            .01 * data.shape[0]))] = 1
     else:
         logger.info("Deriving mask from mean image.")
         mask[np.where(data.mean(axis=0) > data.mean())] = 1
 
-    logger.info("Masked out %d out of %d voxels" % ((mask == 0).sum(), reduce(lambda x, y: x * y, mask.shape)))
+    logger.info("Masked out %d out of %d voxels" % ((mask == 0).sum(), reduce(
+        lambda x, y: x * y, mask.shape)))
     np.save(mask_path, mask)
     return mask
 
@@ -236,7 +250,8 @@ def load_simTB_data(source_directory):
     nifti_files = natural_sort(glob(path.join(source_directory, "*_DATA.nii")))
     sim_files = natural_sort(glob(path.join(source_directory, "*_SIM.mat")))
     if len(nifti_files) != len(sim_files):
-        raise ValueError("Different number of DATA and SIM files found int %s" % source_directory)
+        raise ValueError("Different number of DATA and SIM files found int %s"
+                         % source_directory)
     assert len(nifti_files) > 0
 
     param_files = glob(path.join(source_directory, "*PARAMS.mat"))
@@ -279,7 +294,8 @@ def from_dir(source_directory, out_dir, args):
         data, labels, sim_dict = load_simTB_data(source_directory)
     else:
         if args.h_pattern is not None or args.sz_pattern is not None:
-            read_args = [patt for patt in (args.h_pattern, args.sz_pattern) if patt is not None]
+            read_args = [patt for patt in (args.h_pattern, args.sz_pattern)
+                         if patt is not None]
         else:
             read_args = []
         file_lists = pull_niftis(source_directory, *read_args)
@@ -303,12 +319,13 @@ def read_file_list(file_path):
         parsed_lines = [(i, int(j)) for i, j in parsed_lines]
         for i, l in enumerate(parsed_lines):
             try:
-                assert len(l) == 2, "Wrong length (%d instead of %s)" %(len(l), 2)
+                assert len(l) == 2, ("Wrong length (%d instead of %s)"
+                                     % (len(l), 2))
                 assert isinstance(l[1], int), "Second column not an int"
             except AssertionError as e:
                 raise ValueError("Connot read %s parsed as %r (%s)"
                                  % (lines[i], parsed_lines[i], e))
-    labels = set([l[1] for l in parsed_lines])
+    labels = set(l[1] for l in parsed_lines)
     file_lists = []
     for label in labels:
         file_lists.append([i for i, l in parsed_lines if l == label])
@@ -324,6 +341,10 @@ def from_file(file_path, out_dir, args):
     if args.verbose:
         test_distribution(data, mask)
     split_save_data(data, labels, args.split, out_dir)
+    with open(path.join(out_dir, "sources.txt"), "w") as f:
+        for file_list in file_lists:
+            for file_name in file_list:
+                f.write("%s\n" % file_name)
 
 def from_patterns(file_path, out_dir, args):
     """
@@ -340,6 +361,10 @@ def from_patterns(file_path, out_dir, args):
     if args.verbose:
         test_distribution(data, mask)
     split_save_data(data, labels, args.split, out_dir)
+    with open(path.join(out_dir, "sources.txt"), "w") as f:
+        for file_list in file_lists:
+            for file_name in file_list:
+                f.write("%s\n" % file_name)
 
 def make_argument_parser():
     """
@@ -398,12 +423,12 @@ if __name__ == "__main__":
         logger.setLevel(logging.DEBUG)
 
     out_dir = serial.preprocess(args.out_prefix + args.out)
-    assert path.isdir(out_dir), ("No output directory found (%s), you must make it"
-                                 % out_dir)
+    assert path.isdir(out_dir), ("No output directory found (%s), "
+                                 "you must make it" % out_dir)
 
     if args.which == "from_directory":
-        assert path.isdir(args.source_directory), ("Source directory not found: %s"
-                                                   % source_directory)
+        assert path.isdir(args.source_directory), ("Source directory not found: "
+                                                   "%s" % source_directory)
         from_dir(args.source_directory, out_dir, args)
 
     elif args.which == "from_file":

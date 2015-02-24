@@ -29,6 +29,7 @@ import optparse
 import os
 from os import path
 from pl2mind.experiments import input_handler
+from pl2mind import logger
 import psutil
 
 from pylearn2.config import yaml_parse
@@ -126,9 +127,7 @@ class LogHandler(object):
             "log_stream": ""
             }
 
-
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
+        self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
         h = logging.StreamHandler(MetaLogHandler(self.d))
         self.logger.addHandler(h)
 
@@ -250,7 +249,7 @@ class LogHandler(object):
             self.d["logs"][group] = {}
             for channel in channels:
                 self.d["logs"][group][channel] = []
-        self.logger.info(self.d["logs"])
+        self.logger.info("Channels: %r" % self.d["logs"].keys())
 
     def add_value(self, channel, value):
         """

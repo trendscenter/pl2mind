@@ -40,6 +40,7 @@ class MRIInputHandler(object):
         variance_normalize = hyperparams.get("variance_normalize", False)
         unit_normalize = hyperparams.get("unit_normalize", False)
         demean = hyperparams.get("demean", False)
+        even_input = False # Fix this
         assert not (variance_normalize and unit_normalize)
 
         data_path = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
@@ -54,7 +55,7 @@ class MRIInputHandler(object):
                 mri = MRI.MRI_Transposed(dataset_name=dataset_name,
                                          unit_normalize=unit_normalize,
                                          demean=demean,
-                                         even_input=True,
+                                         even_input=even_input,
                                          apply_mask=True)
                 input_dim = mri.X.shape[1]
                 variance_file_name = ("variance_map_transposed%s%s.npy"
@@ -65,14 +66,14 @@ class MRIInputHandler(object):
                 mask_file = path.join(data_path, "mask.npy")
                 mask = np.load(mask_file)
                 input_dim = (mask == 1).sum()
-                if input_dim % 2 == 1:
-                    input_dim -= 1
+                #if input_dim % 2 == 1:
+                #    input_dim -= 1
                 mri = MRI.MRI_Standard(which_set="full",
                                        dataset_name=dataset_name,
                                        unit_normalize=unit_normalize,
                                        demean=demean,
                                        variance_normalize=variance_normalize,
-                                       even_input=True,
+                                       even_input=even_input,
                                        apply_mask=True)
                 variance_file_name = ("variance_map%s%s%s.npy"
                                       % ("_un" if unit_normalize else "",
