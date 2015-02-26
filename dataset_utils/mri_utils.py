@@ -190,6 +190,8 @@ def split_save_data(data, labels, train_percentage, out_dir):
         Output directory.
     """
 
+
+
     number_subjects = data.shape[0]
     subject_idx = range(number_subjects)
     shuffle(subject_idx)
