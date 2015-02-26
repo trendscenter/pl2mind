@@ -1,0 +1,70 @@
+!obj:pylearn2.train.Train {
+    # MRI dataset.
+    dataset: &train !obj:pl2mind.datasets.MRI.%(data_class)s {
+        which_set: "train",
+        demean: &dm True,
+        variance_normalize: &vn True,
+        apply_mask: &app_mask True,
+        dataset_name: &ds_name %(dataset_name)s
+    },
+    # Multi-layer perceptron model with 2 ReLU hidden layers followed by logistic regression.
+    model: !obj:pylearn2.models.mlp.MLP {
+        layers: [ !obj:pylearn2.models.mlp.RectifiedLinear {
+                     layer_name: 'h0',
+                     dim: %(nhid1)i,
+                     sparse_init: 15
+                 },  !obj:pylearn2.models.mlp.RectifiedLinear {
+                     layer_name: 'h1',
+                     dim: %(nhid2)i,
+                     sparse_init: 15
+                 }, !obj:pylearn2.models.mlp.Softmax {
+                     layer_name: 'y',
+                     n_classes: 2,
+                     irange: 0.
+                 }
+                ],
+        nvis: %(nvis)d,
+    },
+    # Learning is done with stochastic gradient descent.
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        batch_size: %(batch_size)d,
+        learning_rate: %(learning_rate)f,
+        train_iteration_mode: "even_sequential",
+        monitor_iteration_mode: "even_sequential",
+        monitoring_batch_size: 10,
+        monitoring_dataset: {
+            "train" : *train,
+            # Model is tested using a test dataset.  
+            "valid": !obj:pl2mind.datasets.MRI.%(data_class)s {
+                which_set: "test",
+                demean: *dm,
+                variance_normalize: *vn,
+                apply_mask: *app_mask,
+                dataset_name: *ds_name
+            },
+        },
+        # Cost function is the default logistic regression with back propagation.
+        cost: !obj:pylearn2.costs.mlp.Default {},
+        # Momentum on gradients.
+        learning_rule: !obj:pylearn2.training_algorithms.learning_rule.Momentum {
+            init_momentum: %(init_momentum)f
+        },
+        # Termination criteria is provided when the yaml file is loaded.
+        termination_criterion: %(termination_criterion)s,
+    },
+    extensions: [
+        !obj:pylearn2.train_extensions.best_params.MonitorBasedSaveBest {
+            channel_name: "valid_y_misclass",
+            save_path: "%(out_path)s/model_best.pkl",
+        }, 
+        # Momentum is increased from init to final
+        !obj:pylearn2.training_algorithms.learning_rule.MomentumAdjustor {
+            start: 1,
+            saturate: 10,
+            final_momentum: %(final_momentum)f
+        }
+    ],
+    save_path: "%(out_path)s/model.pkl",
+    # This says to save every 10 epochs
+    save_freq : 10
+}
