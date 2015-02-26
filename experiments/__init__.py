@@ -44,6 +44,9 @@ import time
 import zmq
 
 
+logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
+
+
 class MetaLogHandler(object):
     """
     Handler for module logs.
@@ -52,6 +55,7 @@ class MetaLogHandler(object):
     """
     def __init__(self, d):
         self.__dict__.update(locals())
+        del self.self
 
     def write(self, message):
         self.d["log_stream"] += message
@@ -89,37 +93,33 @@ class LogHandler(object):
         Job id.
     """
 
-    def __init__(self, experiment, hyperparams,
-                 out_path, yaml, pid, processing_flag,
-                 mem, cpu, port, last_processed, dbdescr=None, job_id=None):
+    def __init__(self, experiment, out_path, processing_flag, mem, cpu,
+                 last_processed, dbdescr=None, job_id=None):
         self.__dict__.update(locals())
         self.on = False
         self.channels = []
         self.collect_channels = False
         self.channel_groups = {}
 
-        p = psutil.Process(self.pid)
         self.d = {
             "name": experiment.name,
-            "yaml": yaml,
+            "yaml": None,
             "results_of_interest": experiment.results_of_interest +\
                 ["cpu", "mem"],
             "outputs": dict((o, "%s.pdf" % o)
                 for o in experiment.outputs),
             "stats": {
                 "status": "STARTING",
-                "pid": self.pid,
-                "user": p.username,
+                "pid": None,
+                "user": None,
                 "host": socket.gethostname(),
-                "create_time": datetime.datetime.fromtimestamp(
-                    p.create_time).strftime("%Y-%m-%d %H:%M:%S"),
-                "last_heard": datetime.datetime.fromtimestamp(
-                    p.create_time).strftime("%Y-%m-%d %H:%M:%S"),
-                "port": port
+                "create_time": None,
+                "last_heard": None,
+                "port": None
                 },
             "processing": False,
             "last_processed": "Never",
-            "hyperparams": hyperparams,
+            "hyperparams": None,
             "logs": {
                 "cpu": {"cpu": []},
                 "mem": {"mem": []}
@@ -127,9 +127,28 @@ class LogHandler(object):
             "log_stream": ""
             }
 
-        self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
+        self.logger = logger
+        self.logger.setLevel(logging.DEBUG)
         h = logging.StreamHandler(MetaLogHandler(self.d))
         self.logger.addHandler(h)
+        self.write_json()
+
+    def update(self, **kwargs):
+        for key in kwargs.keys():
+            if key == "pid":
+                pid = kwargs["pid"]
+                self.pid = pid
+                p = psutil.Process(pid)
+                self.d["stats"].update(
+                    create_time=datetime.datetime.fromtimestamp(
+                        p.create_time).strftime("%Y-%m-%d %H:%M:%S"),
+                    last_heard=datetime.datetime.fromtimestamp(
+                        p.create_time).strftime("%Y-%m-%d %H:%M:%S"),
+                    pid=pid
+                    )
+            elif not key in self.d.keys():
+                raise AttributeError(key)
+        self.d.update(**kwargs)
 
     def update_db(self):
         """
@@ -212,7 +231,7 @@ class LogHandler(object):
         This will attempt to group channels by edit distance.
         """
         group_name_omits = ["train_", "valid_", "test_"]
-        edit_thresh = 8
+        edit_thresh = 6
         for channel in self.channels:
             edit_distances = dict((c, Levenshtein.distance(channel, c))
                               for c in self.channel_groups.keys())
@@ -249,7 +268,8 @@ class LogHandler(object):
             self.d["logs"][group] = {}
             for channel in channels:
                 self.d["logs"][group][channel] = []
-        self.logger.info("Channels: %r" % self.d["logs"].keys())
+        self.logger.info("Channels: %r" % self.d["logs"])
+        assert "y_misclass" in self.d["logs"].keys()
 
     def add_value(self, channel, value):
         """
@@ -499,6 +519,24 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     set_hyper_parameters(file_parameters, **kwargs)
     hyper_parameters.update(file_parameters)
 
+    # Set the output path, default from environment variable $PYLEARN2_OUTS
+    out_path = serial.preprocess(
+        hyper_parameters.get("out_path", "${PYLEARN2_OUTS}"))
+    if not path.isdir(out_path):
+        os.makedirs(out_path)
+
+    processing_flag = mp.Value("b", False)
+    mem = mp.Value("f", 0.0)
+    cpu = mp.Value("f", 0.0)
+    last_processed = mp.Manager().dict()
+    last_processed["value"] = "Never"
+
+    lh = LogHandler(experiment, out_path, processing_flag, mem, cpu,
+                    last_processed, dbdescr, job_id)
+    h = logging.StreamHandler(lh)
+    lh.logger.info("Hijacking pylearn2 logger (sweet)...")
+    monitor.log.addHandler(h)
+
     # HACK TODO: fix this. For some reason knex formatted strings are sometimes
     # Getting in.
     hyper_parameters = translate(hyper_parameters, "pylearn2")
@@ -529,12 +567,7 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
 
     # The Process id
     pid = os.getpid()
-
-    # Set the output path, default from environment variable $PYLEARN2_OUTS
-    out_path = serial.preprocess(
-        hyper_parameters.get("out_path", "${PYLEARN2_OUTS}"))
-    if not path.isdir(out_path):
-        os.makedirs(out_path)
+    lh.logger.info("Proces id is %d" % pid)
 
     # If any pdfs are in out_path, kill or quit
     if ask and len(glob.glob(path.join(out_path, "*.pdf"))) > 0:
@@ -553,39 +586,35 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
             print "Removing %s" % pdf
             os.remove(pdf)
 
-    # Get the train object
+    lh.logger.info("Making the train object")
     hyper_parameters = expand(flatten(hyper_parameters), dict_type=ydict)
     yaml_template = open(experiment.yaml_file).read()
     yaml = yaml_template % hyper_parameters
-
     train_object = yaml_parse.load(yaml)
 
-    # Set up subprocesses and log handler.
+    lh.logger.info("Seting up subprocesses")
+    lh.logger.info("Setting up listening socket")
     mp_ep, s_ep = mp.Pipe()
     p = mp.Process(target=server, args=(pid, s_ep))
     p.start()
     port = mp_ep.recv()
-
-    processing_flag = mp.Value("b", False)
-    mem = mp.Value("f", 0.0)
-    cpu = mp.Value("f", 0.0)
-    last_processed = mp.Manager().dict()
-    last_processed["value"] = "Never"
-
-    lh = LogHandler(experiment, hyper_parameters, out_path, yaml,
-                    pid, processing_flag, mem, cpu, port, last_processed,
-                    dbdescr, job_id)
-    h = logging.StreamHandler(lh)
-    monitor.log.addHandler(h)
-
     lh.logger.info("Listening on port %d" % port)
 
+    lh.logger.info("Starting model processor")
     model_processor = ModelProcessor(experiment, train_object.save_path,
                                      mp_ep, processing_flag, last_processed,
                                      lh.logger)
     model_processor.start()
+    lh.logger.info("Model processor started")
+
+    lh.logger.info("Starting stat processor")
     stat_processor = StatProcessor(pid, mem, cpu, lh.logger)
     stat_processor.start()
+    lh.logger.info("Stat processor started")
+
+    lh.update(hyperparams=hyper_parameters,
+              yaml=yaml,
+              pid=pid)
 
     # Clean the model after running
     def clean():
@@ -626,7 +655,9 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
 
     # Main loop.
     try:
+        lh.logger.info("Training...")
         train_object.main_loop()
+        lh.logger.info("Training quit without exception")
     except Exception as e:
         lh.logger.exception(e)
         clean()
@@ -634,7 +665,7 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         raise(e)
 
     # After complete, process model.
-    lh.logger.info("Processing...")
+    lh.logger.info("Processing model results...")
     try:
         experiment.analyze_fn(model_processor.best_checkpoint,
                                    model_processor.out_path)
