@@ -425,6 +425,8 @@ def get_features(model, zscore=True, dataset=None, feature_dict=None,
                                  " (None provided)")
             data = dataset.get_design_matrix()
             X = sharedX(data)
+            if transformer:
+                X = transformer.perform(X)
             features = model.encode(X).T.eval()[idx]
             assert features.shape[0] == len(idx), features.shape
         else:

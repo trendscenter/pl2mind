@@ -2,8 +2,12 @@
 Module from Alvaro's ICA
 """
 
+import logging
 import numpy as np
-from pl2mind.logger import logger
+
+
+logger = logging.getLogger("pl2mind")
+
 
 def PCAwhiten(X, Ncomp, **kwargs):
     """
