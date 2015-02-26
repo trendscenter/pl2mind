@@ -4,6 +4,7 @@ TODO: handle functional aspects for fMRI here.
 """
 
 import functools
+import logging
 from nipy import load_image
 from nipy.core.api import Image
 import numpy as np
@@ -15,7 +16,6 @@ from pylearn2.datasets import Dataset
 from pylearn2.datasets import dense_design_matrix
 
 from pl2mind.datasets import dataset_info
-from pl2mind.logger import logger
 
 from pylearn2.space import CompositeSpace
 from pylearn2.utils import contains_nan
@@ -32,6 +32,9 @@ import sys
 import theano
 from theano import config
 import warnings
+
+
+logger = logging.getLogger("pl2mind")
 
 
 class GaussianMRICorruptor(corruption.Corruptor):
@@ -439,6 +442,7 @@ class MRI_Standard(MRI):
             mask = None
 
         if self.even_input:
+            logger.info("Evening input")
             assert mask is not None
             if (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 1:
                 logger.warn("Removing one voxel to mask to even input.")

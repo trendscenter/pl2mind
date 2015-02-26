@@ -55,7 +55,7 @@ class MultiChromosomeLayer(mlp.CompositeLayer):
             if layer_dims:
                 layer.dim = layer_dims[n]
                 logger.warning("Init bias in copying ignored.")
-                layer.b = sharedX(np.zeros((layer.dim,)), 
+                layer.b = sharedX(np.zeros((layer.dim,)),
                              name=(layer.layer_name + '_b'))
             layers.append(layer)
             inputs_to_layers[n] = [n]
@@ -69,7 +69,7 @@ class MultiChromosomeLayer(mlp.CompositeLayer):
                                       state=None, targets=None):
         rval = OrderedDict()
         return rval
-        
+
 class MultiChromosome(Dataset):
     """
     Class to read multiple chromosome data.
@@ -121,11 +121,11 @@ class MultiChromosome(Dataset):
             self.y = self.y[balanced_idx]
             for i in range(num_classes):
                 assert len(np.where(self.y == i)[0].tolist()) == min_count
-        
+
         if read_only:
             print "Format is read-only for %s" % which_set
             h5_path = path.join(p, "gen." + which_set + ".h5")
-            
+
             if not path.isfile(h5_path):
                 self.make_h5(data_files,
                              h5_path,
@@ -166,7 +166,7 @@ class MultiChromosome(Dataset):
         space = space + (IndexSpace(dim=1, max_labels=2),)
         source = source + ("targets",)
         space = CompositeSpace(space)
-        
+
         self.data_specs = (space, source)
         self.rng = make_np_rng(rng, which_method="random_integers")
         assert self.rng is not None
@@ -210,7 +210,7 @@ class MultiChromosome(Dataset):
             data_specs=data_specs,
             return_tuple=return_tuple,
             convert=self.convert)
-    
+
     def get_data_specs(self):
         """
         Returns the data_specs specifying how the data is internally stored.
@@ -247,12 +247,12 @@ class MultiChromosome(Dataset):
                 assert 0 <= start < stop
                 X = X[start:stop, :] / (2.0)
 
-            atom = (tables.Float32Atom() if config.floatX == "float32" 
+            atom = (tables.Float32Atom() if config.floatX == "float32"
                     else tables.Float64Atom())
             gcolumns = h5file.createGroup(h5file.root,
                                           "Chr%d" % (c + 1),
                                           "Chromosome %d" % (c + 1))
-            node = h5file.getNode("/", "Chr%d" % (c + 1))            
+            node = h5file.getNode("/", "Chr%d" % (c + 1))
             h5file.createCArray(gcolumns, "X",
                                 atom=atom,
                                 shape=X.shape,
@@ -297,7 +297,7 @@ class SNP(dense_design_matrix.DenseDesignMatrix):
         topo_view = np.load(data_path)
         y = np.atleast_2d(np.load(label_path)).T
         samples, number_snps = topo_view.shape
-        
+
         if start is not None:
             stop = stop if (stop <= samples) else samples
             assert 0 <= start < stop
@@ -314,5 +314,5 @@ class SNP(dense_design_matrix.DenseDesignMatrix):
                 tmp = y[i,i+1].copy()
                 y[i] = y[j]
                 y[j] = tmp
-        
+
         super(SNP, self).__init__(X=topo_view, y=y, y_labels=np.amax(y)+1)
