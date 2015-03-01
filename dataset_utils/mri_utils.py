@@ -1,5 +1,6 @@
 """
 Utility for loading MRI data.
+TODO: factor out simtb
 """
 
 __author__ = "Devon Hjelm"
@@ -139,7 +140,7 @@ def read_niftis(file_lists):
     logger.info("\rLoading subject from file: %s\n" % ('DONE' + " "*30))
     if data.shape[0] != len(labels):
         raise ValueError("Data and labels have different number of samples.")
-    return data, labels
+    return data, labels, nifti
 
 def test_distribution(data, mask=None):
     logger.info("Testing distribution.")
@@ -272,7 +273,7 @@ def load_simTB_data(source_directory):
         sim_dict[i] = {"SM": sms, "TC": tcs}
     sim_dict["params"] = params
 
-    data, labels = read_niftis(nifti_files)
+    data, labels, base = read_niftis(nifti_files)
     return data, labels, sim_dict
 
 def is_simTBdir(source_directory):
@@ -291,6 +292,7 @@ def from_dir(source_directory, out_dir, args):
     """
     Loads niftis from a directory.
     Labels specified by args.sz_pattern and args.h_pattern.
+    TODO: factor out simtb
     """
     if is_simTBdir(source_directory):
         data, labels, sim_dict = load_simTB_data(source_directory)
@@ -301,8 +303,9 @@ def from_dir(source_directory, out_dir, args):
         else:
             read_args = []
         file_lists = pull_niftis(source_directory, *read_args)
-        data, labels = read_niftis(file_lists)
+        data, labels, base = read_niftis(file_lists)
         sim_dict = None
+        save_image(base, path.join(out_dir, "base.nii"))
 
     mask = save_mask(data, out_dir)
     if args.verbose:
@@ -338,7 +341,10 @@ def from_file(file_path, out_dir, args):
     Loads niftis from list in file.
     """
     file_lists = read_file_list(file_path)
-    data, labels = read_niftis(file_lists)
+    data, labels, base = read_niftis(file_lists)
+
+    save_image(base, path.join(out_dir, "base.nii"))
+
     mask = save_mask(data, out_dir)
     if args.verbose:
         test_distribution(data, mask)
@@ -358,7 +364,10 @@ def from_patterns(file_path, out_dir, args):
         file_list = glob(pattern)
         logger.info("Found %r" % file_list)
         file_lists.append(file_list)
-    data, labels = read_niftis(file_lists)
+    data, labels, base = read_niftis(file_lists)
+
+    save_image(base, path.join(out_dir, "base.nii"))
+
     mask = save_mask(data, out_dir)
     if args.verbose:
         test_distribution(data, mask)

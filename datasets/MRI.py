@@ -95,7 +95,8 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
     """
 
     def __init__(self, X, y):
-        if self.dataset_name in dataset_info.aod_datasets and self.which_set == "full":
+        if (self.dataset_name in dataset_info.aod_datasets
+            and self.which_set == "full"):
             self.targets, self.novels = self.load_aod_gts()
             assert self.targets.shape == self.novels.shape
             if X.shape[0] % self.targets.shape[0] != 0:
@@ -136,7 +137,8 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             assert np.amin(X) == -1, np.amin(X)
 
         if self.shuffle:
-            self.shuffle_rng = make_np_rng(None, [1 ,2 ,3], which_method="shuffle")
+            self.shuffle_rng = make_np_rng(None, [1 ,2 ,3],
+                                           which_method="shuffle")
             for i in xrange(m):
                 j = self.shuffle_rng.randint(m)
                 tmp = X[i].copy()
@@ -183,13 +185,19 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                 raise ValueError("dataset \'%s\' not supported." % which_set)
             data_path = p + "full_unshuffled.npy"
             label_path = p + "full_labels_unshuffled.npy"
+        nifti_path = p + "base.nii"
 
         data_path = serial.preprocess(data_path)
         label_path = serial.preprocess(label_path)
+        try:
+            self.base_nifti = load_image(serial.preprocess(nifti_path))
+        except IOError:
+            raise IOError("`base.nii` not in dataset directory. "
+                          "You may need to reprocess.")
 
         if not(path.isfile(data_path)):
-            raise ValueError("Dataset %s not found in %s" %(which_set,
-                                                            serial.preprocess(p)))
+            raise ValueError("Dataset %s not found in %s"
+                             % (which_set, serial.preprocess(p)))
         return data_path, label_path
 
     def load_aod_gts(self):
@@ -257,8 +265,8 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             Weights view of a matrix (see MRIViewConverter).
         """
         if self.view_converter is None:
-            raise NotImplementedError("Tried to call get_weights_view on a dataset "
-                            "that has no view converter.")
+            raise NotImplementedError("Tried to call get_weights_view on a "
+                            "dataset that has no view converter.")
 #        if self.X.shape[1] != mat.shape[1]:
 #            raise ValueError("mat samples have different size than data: "
 #                             "%d vs %d" % (mat.shape[1], self.X.shape[1]))
@@ -311,15 +319,15 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             4D topological view.
         """
         if self.view_converter is None:
-            raise NotImplementedError("Tried to call get_topological_view on a dataset "
-                                      "that has no view converter")
+            raise NotImplementedError("Tried to call get_topological_view on a"
+                                      " dataset that has no view converter")
         if mat is None:
             mat = self.X
         topo_view = self.view_converter.design_mat_to_topo_view(mat)
 
         return topo_view
 
-    def get_nifti(self, topo_view):
+    def get_nifti(self, topo_view, base_nifti=None):
         """
         Process the nifti
 
@@ -334,10 +342,22 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             Nifti image from topological view.
         """
         m, r, c, d = topo_view.shape
-        base_nifti_path = serial.preprocess(path.join(self.dataset_root, "mri_extra", "basenifti.nii"))
-        base_nifti = load_image(base_nifti_path)
 
-        image = Image.from_image(base_nifti, data=topo_view.transpose((1, 2, 3, 0)))
+        if basenifti is None:
+            assert self.base_nifti is not None, ("`base.nii` not in dataset "
+                                                 "directory. You may need to "
+                                                 "reprocess.")
+            base_nifti = self.base_nifti
+        else:
+            base2new_affine = np.linalg.inv(
+                base_nifti.get_affine()).dot(self.base_nifti.get_affine())
+
+        #image = Image.from_image(base_nifti,
+        #                         data=topo_view.transpose((1, 2, 3, 0)))
+
+        image = Image.from_image(base_nifti,
+                                 data=topo_view[0])
+
         return image
 
     @functools.wraps(Dataset.iterator)
@@ -361,11 +381,11 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
 
         convert = []
         for sp, src in safe_zip(sub_spaces, sub_sources):
-            if src == 'features' and getattr(self, 'view_converter', None) is not None:
+            if (src == 'features'
+                and getattr(self, 'view_converter', None) is not None):
                 if self.distorter is None:
                     conv_fn = (lambda batch, self=self, space=sp:
-                                   self.view_converter.get_formatted_batch(batch,
-                                                                           space))
+                        self.view_converter.get_formatted_batch(batch, space))
                 else:
                     conv_fn = (lambda batch, self=self, space=sp:
                                    self.distorter._distort(
@@ -381,8 +401,8 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             if hasattr(self, '_iter_subset_class'):
                 mode = self._iter_subset_class
             else:
-                raise ValueError('iteration mode not provided and no default '
-                                 'mode set for %s' % str(self))
+                raise ValueError("iteration mode not provided and no default "
+                                 "mode set for %s" % str(self))
         else:
             mode = resolve_iterator_class(mode)
 
@@ -444,12 +464,14 @@ class MRI_Standard(MRI):
         if self.even_input:
             logger.info("Evening input")
             assert mask is not None
-            if (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 1:
+            if ((reduce(lambda x, y: x * y, topo_view[0].shape) -
+                 (mask == 0).sum()) % 2 == 1):
                 logger.warn("Removing one voxel to mask to even input.")
                 ons = np.where(mask == 1)
                 i, j, k = (ons[r][0] for r in range(3))
                 mask[i, j, k] = 0
-                assert (reduce(lambda x, y: x * y, topo_view[0].shape) - (mask == 0).sum()) % 2 == 0
+                assert (reduce(lambda x, y: x * y, topo_view[0].shape)
+                        - (mask == 0).sum()) % 2 == 0
 
         X = self.set_mri_topological_view(topo_view, mask=mask)
         if mask is not None:
@@ -460,7 +482,8 @@ class MRI_Standard(MRI):
 
         super(MRI_Standard, self).__init__(X=X, y=y)
 
-    def set_mri_topological_view(self, topo_view, mask=None, axes=('b', 0, 1, 'c')):
+    def set_mri_topological_view(self, topo_view, mask=None,
+                                 axes=('b', 0, 1, 'c')):
         """
         Set the topological view.
 
@@ -530,7 +553,8 @@ class MRI_Transposed(MRI):
         logger.info("Setting up transposed MRI dataset.")
 
         if which_set != "full":
-            warnings.warn("Only full dataset appropriate for transpose, setting to full.")
+            warnings.warn("Only full dataset appropriate for transpose, "
+                          "setting to full.")
             which_set = "full"
 
         data_file, label_file = self.resolve_dataset(which_set, dataset_name)
@@ -555,7 +579,8 @@ class MRI_Transposed(MRI):
 
         super(MRI_Transposed, self).__init__(X=X, y=y)
 
-    def set_mri_topological_view(self, topo_view, mask=None, axes=('b', 0, 1, 'c')):
+    def set_mri_topological_view(self, topo_view, mask=None,
+                                 axes=('b', 0, 1, 'c')):
         """
         Set the topological view.
 
@@ -615,6 +640,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
             Use a dummy file. This is for tests.
         """
 
+        logger.warn("This class is deprecated and needs to be refactored.")
         if not path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")):
             raise ValueError("Did you set the PYLEARN_NI_PATH variable?")
 
@@ -682,7 +708,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
         Note: parameters the same as __init__ function.
         """
 
-        print "Making h5 file for %s" % which_set #TODO(dhjelm): switch to logging.
+        logger.info("Making h5 file for %s" % which_set)
 
         if which_set == 'train':
             source_path = serial.preprocess(p + 'train.npy')
@@ -732,11 +758,12 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
 
         assert not np.any(np.isnan(X))
 
-        h5file, node = self.init_hdf5(data_path, ([samples, size], [samples, num_labels]))
+        h5file, node = self.init_hdf5(data_path,
+                                      ([samples, size], [samples, num_labels]))
         MRI_Big.fill_hdf5(h5file, X, one_hot, node)
         h5file.close()
 
-    def get_nifti(self, W):
+    def get_nifti(self, W, base_nifti=None):
         """
         Function to make a nifti file from weights.
 
@@ -747,8 +774,11 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
         """
 
         m, r, c, d = W.shape
-        base_nifti_path = serial.preprocess("${PYLEARN2_NI_PATH}/mri_extra/basenifti.nii")
-        base_nifti = load_image(base_nifti_path)
+        if basenifti is None:
+            base_nifti = self.base_nifti
+        else:
+            base2new_affine = np.linalg.inv(
+                base_nifti.get_affine()).dot(self.base_nifti.get_affine())
 
         data = np.zeros([r, c, d, m], dtype=W.dtype)
 
