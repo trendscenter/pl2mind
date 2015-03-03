@@ -606,6 +606,7 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         yaml_template = open(experiment.yaml_file).read()
         yaml = yaml_template % hyper_parameters
         train_object = yaml_parse.load(yaml)
+        return train_object
 
         lh.write_json()
 
@@ -720,8 +721,10 @@ def run_jobman_from_sql(jobargs):
 
     command = ("/export/mialab/users/mindgroup/Code/jobman/bin/jobman sql %s ."
                % dbdescr)
+    user = os.getenv("USER")
     dbi = DBILocal([command] * jobargs.n_proc,
-        **dict(log_dir="/export/mialab/users/mindgroup/Experiments/LOGS"))
+        **dict(log_dir=("/export/mialab/users/mindgroup/Experiments/%s/LOGS"
+                        % user)))
     dbi.nb_proc = jobargs.n_proc
     dbi.run()
 
