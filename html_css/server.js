@@ -1,40 +1,27 @@
-var http = require("http");
-var fs = require('fs');
-var url = require("url");
-var express = require("express");
-var bodyParser = require("body-parser");
-var directory = require("serve-index");
-var path = require("path");
-var pg = require("pg");
 var port = process.argv[2]
-var html_css = process.argv[3];
+var pl2mind_path = process.argv[3];
+var lib_path = process.argv[4];
+
+var path = require("path");
 
 console.log("Starting server on port " + port);
-console.log("Souce at " + html_css);
+console.log("Libraries at " + lib_path);
+console.log("pl2mind path at " + pl2mind_path)
+
+var sources = require(lib_path);
+var express = sources.express
+var bodyParser = sources.bodyParser
 
 var server = express();
+sources.redirect(server);
 server.listen(port);
-var io = require('socket.io');
-var net = require('net');
-var zmq = require('zmq');
 var router = express.Router();
 
-server.use("html_css", directory(html_css));
 server.use(express.static(path.resolve("./")));
-server.use(express.static("html_css"));
 server.use(bodyParser.json());
 server.use(bodyParser.urlencoded({extended: true}));
-
-var knex = require("knex")({
-    client: "postgres",
-    connection: {
-        host     : "pleiades",
-        port     : 5431,
-        user     : "deepresultsserver",
-        database : "jobman",
-  }
-});
-var Bookshelf = require('bookshelf')(knex);
+server.use("/lib", express.static(lib_path));
+server.use("/pl2mind", express.static(pl2mind_path));
 
 console.log("Server started. Root directory is " + path.resolve("./"));
 
@@ -95,7 +82,6 @@ server.get("/get_table", function (req, res) {
 });
 
 server.get("/*/$", function(request, response) {
-    console.log(request);
     console.log("Sending experiment");
     response.sendFile("experiment.html", { root: __dirname });
 });
