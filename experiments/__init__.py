@@ -134,9 +134,11 @@ class LogHandler(object):
         self.write_json()
 
     def update(self, **kwargs):
-        for key in kwargs.keys():
+        stats_update = {}
+        removes = []
+        for key, value in kwargs.iteritems():
             if key == "pid":
-                pid = kwargs["pid"]
+                pid = value
                 self.pid = pid
                 p = psutil.Process(pid)
                 self.d["stats"].update(
@@ -146,8 +148,15 @@ class LogHandler(object):
                         p.create_time).strftime("%Y-%m-%d %H:%M:%S"),
                     pid=pid
                     )
+            elif key in self.d["stats"].keys():
+                stats_update[key] = value
+                removes.append(key)
             elif not key in self.d.keys():
                 raise AttributeError(key)
+        self.d["stats"].update(**stats_update)
+        for key in removes:
+            kwargs.pop(key)
+
         self.d.update(**kwargs)
 
     def update_db(self):
@@ -268,7 +277,7 @@ class LogHandler(object):
             self.d["logs"][group] = {}
             for channel in channels:
                 self.d["logs"][group][channel] = []
-        self.logger.info("Channels: %r" % self.d["logs"])
+        self.logger.info("Channels: %r" % self.d["logs"].keys())
         assert "y_misclass" in self.d["logs"].keys()
 
     def add_value(self, channel, value):
@@ -537,84 +546,99 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     lh.logger.info("Hijacking pylearn2 logger (sweet)...")
     monitor.log.addHandler(h)
 
-    # HACK TODO: fix this. For some reason knex formatted strings are sometimes
-    # Getting in.
-    hyper_parameters = translate(hyper_parameters, "pylearn2")
+    try:
+        # HACK TODO: fix this. For some reason knex formatted strings are sometimes
+        # Getting in.
+        hyper_parameters = translate(hyper_parameters, "pylearn2")
 
-    # Use the input hander to get input information.
-    ih = input_handler.MRIInputHandler()
-    input_dim, variance_map_file = ih.get_input_params(hyper_parameters)
-    if hyper_parameters["nvis"] is None:
-        hyper_parameters["nvis"] = input_dim
-    # Hack for NICE. Need to rethink inner-dependencies of some model params.
-    if ("encoder" in hyper_parameters.keys()
-        and "nvis" in hyper_parameters["encoder"].keys()
-        and hyper_parameters["encoder"]["nvis"] is None):
-        hyper_parameters["encoder"]["nvis"] = input_dim
+        # Use the input hander to get input information.
+        ih = input_handler.MRIInputHandler()
+        input_dim, variance_map_file = ih.get_input_params(hyper_parameters)
+        if hyper_parameters["nvis"] is None:
+            hyper_parameters["nvis"] = input_dim
+        # Hack for NICE. Need to rethink inner-dependencies of some model params.
+        if ("encoder" in hyper_parameters.keys()
+            and "nvis" in hyper_parameters["encoder"].keys()
+            and hyper_parameters["encoder"]["nvis"] is None):
+            hyper_parameters["encoder"]["nvis"] = input_dim
 
-    # If there's min_lr, make it 1/10 learning_rate
-    if "min_lr" in hyper_parameters.keys():
-        hyper_parameters["min_lr"] = hyper_parameters["learning_rate"] / 10
+        # If there's min_lr, make it 1/10 learning_rate
+        if "min_lr" in hyper_parameters.keys():
+            hyper_parameters["min_lr"] = hyper_parameters["learning_rate"] / 10
 
-    # Corruptor is a special case of hyper parameters that depends on input
-    # file: variance_map. So we hack it in here.
-    if "corruptor" in hyper_parameters.keys():
-        if "variance_map" in hyper_parameters["corruptor"].keys():
-            hyper_parameters["corruptor"]["variance_map"] =\
-            "!pkl: %s" % variance_map_file
-    else:
-        hyper_parameters["variance_map_file"] = variance_map_file
+        # Corruptor is a special case of hyper parameters that depends on input
+        # file: variance_map. So we hack it in here.
+        if "corruptor" in hyper_parameters.keys():
+            if "variance_map" in hyper_parameters["corruptor"].keys():
+                hyper_parameters["corruptor"]["variance_map"] =\
+                "!pkl: %s" % variance_map_file
+        else:
+            hyper_parameters["variance_map_file"] = variance_map_file
 
-    # The Process id
-    pid = os.getpid()
-    lh.logger.info("Proces id is %d" % pid)
+        lh.write_json()
 
-    # If any pdfs are in out_path, kill or quit
-    if ask and len(glob.glob(path.join(out_path, "*.pdf"))) > 0:
-        print ("Results found in %s "
-               "Proceeding will erase." % out_path)
-        command = None
-        while not command in ["yes", "no", "y", "n"]:
-            command = raw_input("%s: " % "Proceed?")
-            if command in ["yes", "y"]:
-                break
-            elif command in ["no", "n"]:
-                exit()
-            else:
-                print ("Please enter yes(y) or no(n)")
-        for pdf in glob.glob(path.join(out_path, "*.pdf")):
-            print "Removing %s" % pdf
-            os.remove(pdf)
+        # The Process id
+        pid = os.getpid()
+        lh.logger.info("Proces id is %d" % pid)
 
-    lh.logger.info("Making the train object")
-    hyper_parameters = expand(flatten(hyper_parameters), dict_type=ydict)
-    yaml_template = open(experiment.yaml_file).read()
-    yaml = yaml_template % hyper_parameters
-    train_object = yaml_parse.load(yaml)
+        # If any pdfs are in out_path, kill or quit
+        if ask and len(glob.glob(path.join(out_path, "*.pdf"))) > 0:
+            print ("Results found in %s "
+                   "Proceeding will erase." % out_path)
+            command = None
+            while not command in ["yes", "no", "y", "n"]:
+                command = raw_input("%s: " % "Proceed?")
+                if command in ["yes", "y"]:
+                    break
+                elif command in ["no", "n"]:
+                    exit()
+                else:
+                    print ("Please enter yes(y) or no(n)")
+            for pdf in glob.glob(path.join(out_path, "*.pdf")):
+                print "Removing %s" % pdf
+                os.remove(pdf)
+            for pkl in glob.glob(path.join(out_path, "*.pkl")):
+                print "Removing %s" % pkl
+                os.remove(pkl)
 
-    lh.logger.info("Seting up subprocesses")
-    lh.logger.info("Setting up listening socket")
-    mp_ep, s_ep = mp.Pipe()
-    p = mp.Process(target=server, args=(pid, s_ep))
-    p.start()
-    port = mp_ep.recv()
-    lh.logger.info("Listening on port %d" % port)
+        lh.logger.info("Making the train object")
+        hyper_parameters = expand(flatten(hyper_parameters), dict_type=ydict)
+        yaml_template = open(experiment.yaml_file).read()
+        yaml = yaml_template % hyper_parameters
+        train_object = yaml_parse.load(yaml)
 
-    lh.logger.info("Starting model processor")
-    model_processor = ModelProcessor(experiment, train_object.save_path,
-                                     mp_ep, processing_flag, last_processed,
-                                     lh.logger)
-    model_processor.start()
-    lh.logger.info("Model processor started")
+        lh.write_json()
 
-    lh.logger.info("Starting stat processor")
-    stat_processor = StatProcessor(pid, mem, cpu, lh.logger)
-    stat_processor.start()
-    lh.logger.info("Stat processor started")
+        lh.logger.info("Seting up subprocesses")
+        lh.logger.info("Setting up listening socket")
+        mp_ep, s_ep = mp.Pipe()
+        p = mp.Process(target=server, args=(pid, s_ep))
+        p.start()
+        port = mp_ep.recv()
+        lh.logger.info("Listening on port %d" % port)
 
-    lh.update(hyperparams=hyper_parameters,
-              yaml=yaml,
-              pid=pid)
+        lh.logger.info("Starting model processor")
+        model_processor = ModelProcessor(experiment, train_object.save_path,
+                                         mp_ep, processing_flag, last_processed,
+                                         lh.logger)
+        model_processor.start()
+        lh.logger.info("Model processor started")
+
+        lh.logger.info("Starting stat processor")
+        stat_processor = StatProcessor(pid, mem, cpu, lh.logger)
+        stat_processor.start()
+        lh.logger.info("Stat processor started")
+
+        lh.update(hyperparams=hyper_parameters,
+                  yaml=yaml,
+                  pid=pid,
+                  port=port)
+        lh.write_json()
+
+    except Exception as e:
+        lh.logger.exception(e)
+        lh.finish("FAILED")
+        raise e
 
     # Clean the model after running
     def clean():
@@ -694,9 +718,10 @@ def run_jobman_from_sql(jobargs):
                   "table": jobargs.table,
                   })
 
-    command = "/na/homes/dhjelm/Code/Jobman/bin/jobman sql %s ." % dbdescr
+    command = ("/export/mialab/users/mindgroup/Code/jobman/bin/jobman sql %s ."
+               % dbdescr)
     dbi = DBILocal([command] * jobargs.n_proc,
-        **dict(log_dir="/export/mialab/users/dhjelm/Experiments/LOGS"))
+        **dict(log_dir="/export/mialab/users/mindgroup/Experiments/LOGS"))
     dbi.nb_proc = jobargs.n_proc
     dbi.run()
 
@@ -712,12 +737,13 @@ def run_one_jobman(jobargs):
                   "database": jobargs.database,
                   "table": jobargs.table,
                   })
+    user = os.getenv("USER")
     options = optparse.Values(dict(modules=None,
                                    n=1,
-                                   workdir="/na/homes/dhjelm/tmp/jobman/",
+                                   workdir="/na/homes/%s/tmp/jobman/" % user,
                                    finish_up_after=None,
                                    save_every=None))
-    expdir = "/export/mialab/users/dhjelm/Experiments/"
+    expdir = "/export/mialab/users/%s/Experiments/" % user,
     runner_sql(options, dbdescr, expdir)
 
 def jobman_status(jobargs):
