@@ -31,6 +31,7 @@ from pylearn2.utils import sharedX
 import sys
 import theano
 from theano import config
+from theano import tensor as T
 import warnings
 
 
@@ -192,8 +193,9 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         try:
             self.base_nifti = load_image(serial.preprocess(nifti_path))
         except IOError:
-            raise IOError("`base.nii` not in dataset directory. "
-                          "You may need to reprocess.")
+            self.base_nifti = None
+            logger.warn("`base.nii` not in dataset directory. "
+                        "You may need to reprocess.")
 
         if not(path.isfile(data_path)):
             raise ValueError("Dataset %s not found in %s"
@@ -855,7 +857,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
 
     def __init__(self, shape, mask=None, axes=('b', 0, 1, 'c')):
         self.__dict__.update(locals())
-
+        self.theano_mask = None
         if self.mask is not None:
             if not mask.shape == shape:
                 raise ValueError("Mask shape (%r) does not fit data shape (%r)"
@@ -925,8 +927,9 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
 
         if self.mask is not None:
             m = topo_array.shape[0]
-            mask_idx = np.where(self.mask.transpose([self.axes.index(ax) - 1
-                                                for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
+            mask_idx = np.where(self.mask.transpose(
+                [self.axes.index(ax) - 1
+                 for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
             design_matrix = np.zeros((m, len(mask_idx)), dtype=topo_array.dtype)
             for i in range(m):
                 topo_array_c01 = topo_array[i].transpose([self.axes.index(ax) - 1
@@ -939,6 +942,28 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
                                                      np.prod(topo_array.shape[1:])))
 
         return design_matrix
+
+    def tv_to_dm_theano(self, TV):
+        TV_trans = T.transpose(TV[:, ],
+                               tuple(self.axes.index(ax)
+                                     for ax in ("b", "c", 0, 1)))
+        TV_flat = T.reshape(TV_trans,
+                            (TV_trans.shape[0],
+                             TV_trans.shape[1] * TV_trans.shape[2] *
+                             TV_trans.shape[3]))
+
+        if self.mask is not None:
+            if self.theano_mask is None:
+                self.theano_mask = sharedX(self.mask)
+            transposed_mask = T.transpose(self.theano_mask,
+                                          tuple(self.axes.index(ax) - 1
+                                                for ax in ("c", 0, 1)))
+            mask_idx = transposed_mask.flatten().nonzero()[0]
+            dm = TV_flat[:, mask_idx]
+        else:
+            dm = TV_flat
+
+        return dm
 
 class MRIViewConverterTransposed(MRIViewConverter):
     """

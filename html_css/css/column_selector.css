@@ -1,0 +1,225 @@
+#main {
+    font-size: 100%;
+    font-family: "Lato", sans-serif;
+    color: #6f7c95;
+    font-size: 16px;
+    background-color: #efefff;
+}
+
+#popover-target label {
+  margin: 0 5px;
+  display: block;
+}
+#popover-target input {
+  margin-right: 5px;
+}
+.popover {
+    width: auto;
+    height: 300px;
+    margin-top: 100px; /* adjust popover position */
+    overflow-y: scroll;
+}
+
+#pdfModal .modal-dialog {
+    width: 70%;
+    height: 70%;
+}
+
+#modelModal .modal-dialog {
+    width: 80%;
+    height: 90%;
+    overflow-y: scroll;
+}
+
+
+.modal-dialog {
+    width: 40%; /* respsonsive width */
+}
+
+.modal-dialog.large {
+    width: 80%; /* respsonsive width */
+}
+
+.param_div {
+    display: inline-block;
+    vertical-align: top;
+    padding: 5px 50px;
+}
+
+.button_div {
+    display: inline-block;
+    vertical-align: middle;
+    padding: 0px 10px;
+}
+
+.info_title {
+    margin-bottom: 10px;
+}
+
+.plot_group_div {
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: 10px 10px 10px 10px;
+    background-color: white;
+}
+
+.plot_content_div {
+    border: 2px solid #a1a1a1;
+    padding: 0px 10px;
+    border-radius: 5px;
+    display: inline-block;
+    vertical-align: top;
+    margin: 10px 10px 10px 10px;
+}
+
+.plot_div {
+    height: 300px;
+    width: 600px;
+}
+
+.table_div {
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: 10px 10px 10px 10px;
+    overflow: scroll;
+    background-color: white;
+}
+
+.table_header_div {
+    border: 1px solid #559999;
+    width: 280px;
+    height: 45px;
+    border-radius: 5px;
+    margin: 5px 5px 5px 5px;
+}
+
+.table_title_div {
+    font-size: 30px;
+    height: 45px;
+    float: left;
+    margin-left: 10px;
+    width: 180px;
+}
+
+#title_div {
+    padding: 5px 10px;
+    margin: 10px 20px 10px 10px;
+    width: 1000px;
+    overflow: auto;
+}
+
+.columnSelectorWrapper {
+    height: 45px;
+    vertical-align: middle;
+    margin-left: 150px;
+}
+
+.btn.btn-default {
+    margin-top: 5px;
+    vertical-align: middle;
+}
+
+.trigger {
+    display: block;
+    width: auto;
+    margin-right: 0px;
+    height: 18px;
+    padding-left: 5px;
+    padding-right: 5px;
+    text-align: center;
+    color: #FFF;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-radius: 50em;
+    background: #44D;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
+}
+
+#kill_trigger {
+    background: #E88;
+}
+
+#process_trigger {
+    margin-top: 10px;
+    background: #3C3;
+}
+
+.live-trigger {
+    display: block;
+    width: 60px;
+    margin-right: 0px;
+    height: 18px;
+    text-align: center;
+    color: #FFF;
+    font-size: 16px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-radius: 50em;
+    background: #44D;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
+}
+
+.long-trigger {
+    width: 80px;
+}
+
+.is-hidden {
+    visibility: hidden;
+}
+
+#myTab {
+    margin: 10px 20px 10px 10px;
+    height: auto;
+    width: auto;
+}
+
+#tabs {
+    height: auto;
+    width: auto;
+}
+
+.tab-content {
+    background: white;
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: -10px 10px 10px 10px;
+    background-color: white;
+    height: auto;
+    width: auto;
+}
+
+#stats_content {
+    height: auto;
+}
+
+.pdf_object {
+    border: 2px solid #a1a1a1;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin: 10px 10px 10px 10px;
+    height: 100%;
+    width: 100%;
+}
+
+#process_button {
+    margin-top: 0px;
+}
+
+.cd-popup-trigger {
+  display: block;
+  width: 60px;
+  margin-right: 0px;
+  height: 12px;
+  text-align: center;
+  color: #FFF;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  border-radius: 50em;
+  background: #35a785;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.07);
+}

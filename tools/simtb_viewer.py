@@ -13,8 +13,24 @@ from matplotlib import pyplot as plt
 from matplotlib import rc
 import numpy as np
 
-logging.basicConfig(format="[%(levelname)s]:%(message)s")
-logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("pl2mind")
+
+def make_spatial_map_image(spatial_map, fig=None, out_file=None):
+    if fig is None:
+        fig = plt.figure()
+
+    assert spatial_map.shape[2] == 1
+    spatial_map = spatial_map.reshape(*spatial_map.shape[:2])
+    imax = np.max(np.absolute(spatial_map)); imin = -imax
+    plt.axis("off")
+    imshow_args = {'vmax': imax, 'vmin': imin}
+    plt.imshow(spatial_map)
+    if out_file is not None:
+        logger.info("Saving montage to %s" % out_file)
+        plt.savefig(out_file)
+    else:
+        plt.draw()
 
 def montage(weights, fig=None, out_file=None,
             feature_dict=None, target_stat=None, target_value=None):
@@ -46,10 +62,10 @@ def montage(weights, fig=None, out_file=None,
                  transform=ax.transAxes,
                  horizontalalignment='center',
                  color="white")
-        
+
         pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
         colors = ["purple", "yellow", "green"]
-        
+
         if (feature_dict is not None and
             feature_dict.get(f, None) is not None):
             d = feature_dict[f]
@@ -71,7 +87,7 @@ def montage(weights, fig=None, out_file=None,
                                                  ec=(0., 0.5, 0.),
                                                  fc="none")
                         ax.add_patch(p_fancy)
-    
+
     logger.info("Finished processing simtb montage")
     if out_file is not None:
         logger.info("Saving montage to %s" % out_file)

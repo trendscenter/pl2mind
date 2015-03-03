@@ -561,6 +561,10 @@ function updateFromJSON(json, wd) {
 	}
 	options.min = min;
 	options.max = max;
+	options.series = {
+            shadowSize: 0,
+            downsample: { threshold: 100 }
+        };
 	var placeholder = $("#plot" + id.toString());
 	console.log("Actual plot");
 	$.plot(placeholder, plot_data, options);
