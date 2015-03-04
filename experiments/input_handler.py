@@ -79,6 +79,8 @@ class MRIInputHandler(object):
                                       % ("_un" if unit_normalize else "",
                                          "_vn" if variance_normalize else "",
                                          "_dm" if demean else ""))
+            else:
+                raise ValueError("Unknown data class: %s" % data_class)
 
         variance_map_file = path.join(data_path, variance_file_name)
         if not path.isfile(variance_map_file):
