@@ -9,6 +9,7 @@ import argparse
 import json
 import logging
 from matplotlib import pyplot as plt
+import networkx as nx
 import os
 from os import path
 
@@ -44,7 +45,7 @@ def save_simtb_spatial_maps(dataset, features, out_path):
     for i, feature in features.f.iteritems():
         spatial_map = spatial_maps[i]
         simtb_viewer.make_spatial_map_image(
-            spatial_map, out_file=path.join(out_path, "%d.png" % i))
+            spatial_map, out_file=path.join(out_path, "%d.png" % feature.id))
 
 def main(model, out_path=None, prefix=None, **anal_args):
     """
@@ -89,23 +90,38 @@ def main(model, out_path=None, prefix=None, **anal_args):
     if isinstance(dataset, TransformerDataset):
         dataset = dataset.raw
 
+    anal_dict = dict()
     for name, features in feature_dict.iteritems():
-        json_file = path.join(out_path, "%s_analysis.json" % name)
         image_dir = path.join(out_path, "%s_images" % name)
         if not path.isdir(image_dir):
             os.mkdir(image_dir)
-
-        with open(json_file, "w") as f:
-            json.dump(dict(
-                name=name,
-                image_dir=image_dir,
-                spatial_maps=features.spatial_maps.tolist(),
-                activations=features.activations.tolist(),
-                feature_stats=dict(
-                    (k, features[k].stats) for k in features.f.keys()
-                )
-            ), f)
         save_simtb_spatial_maps(dataset, features, image_dir)
+
+        fds = dict()
+
+        for k, f in features.f.iteritems():
+            fd = dict(
+                index=f.id,
+                image=path.join("%s_images" % name, "%d.png" % f.id)
+            )
+            fd.update(**f.stats)
+
+            fds[k] = fd
+
+        anal_dict[name] = dict(
+            name=name,
+            image_dir=image_dir,
+            #spatial_maps=features.spatial_maps.tolist(),
+            #activations=features.activations.tolist(),
+            features=fds
+        )
+
+    ms = fe.ModelStructure(model, dataset)
+    #anal_dict["graph"] = nx.node_link_data(fe.get_nx())
+
+    json_file = path.join(out_path, "analysis.json")
+    with open(json_file, "w") as f:
+        json.dump(anal_dict, f)
 
     logger.info("Done.")
 

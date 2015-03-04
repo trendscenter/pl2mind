@@ -22,6 +22,8 @@ from pylearn2.models.dbm.dbm import RBM
 from pylearn2.models.vae import VAE
 from pylearn2.utils import sharedX
 
+import networkx as nx
+
 import theano
 from theano import tensor as T
 
@@ -37,6 +39,84 @@ except ImportError:
     nice_mlp = None
     logger.warn("NICE not found, so hopefully you're "
                 "not trying to load a NICE model.")
+
+
+class ModelStructure(object):
+    def __init__(self, model, dataset):
+        self.__dict__.update(locals())
+        del self.self
+
+        self.parse_transformers()
+
+    def parse_transformers(self):
+        self.transformers = []
+        while isinstance(self.dataset, TransformerDataset):
+            logger.info("Found transformer of type %s"
+                        % type(self.dataset.transformer))
+            self.transformers.append(self.dataset.transformer)
+            self.dataset = self.dataset.raw
+
+    def transposed(self):
+        return isinstance(self.dataset, MRI_Transposed)
+
+    def get_ordered_list(self):
+        return self.transformers + [self.model]
+
+    def get_graph(self):
+        graph = dict()
+
+        for i, (t1, t2) in enumerate(zip(self.transformers[:-1],
+                                         self.transformers[1:])):
+            graph["T%d" % i] = (t1, t2)
+
+        if len(self.transformers) == 0:
+            graph["D"] = (self.dataset, self.model)
+        else:
+            graph["D"] = (self.dataset, self.transformers[0])
+            graph["T%d" % (len(self.transformers) - 1)] = (
+                self.transformers[-1], self.model
+            )
+
+        return graph
+
+    def get_named_graph(self):
+        graph = self.get_graph()
+        named_graph = dict()
+        for k, (v1, v2) in graph.iteritems():
+            # Hack to get the name out
+            n1 = str(type(v1)).split(".")[-1][:-2]
+            n2 = str(type(v2)).split(".")[-1][:-2]
+            named_graph[k] = (n1, n2)
+
+        return named_graph
+
+    def get_nx(self):
+        graph = self.get_named_graph()
+        G = nx.DiGraph()
+
+        models = self.get_ordered_list()
+        models = [str(type(m)).split(".")[-1][:-2]
+                  for m in [self.dataset] + models]
+        node_dict = dict(
+            (j, i) for i, j in enumerate(models)
+        )
+        G.add_nodes_from(enumerate(models))
+        pos = dict((i, (0, i)) for i, j in enumerate(models))
+
+        for k, (v1, v2) in graph.iteritems():
+            #if k == "D":
+            #    G.add_node(v1, shape="ellipse")
+            #elif "T" in k:
+            #    G.add_node(v1, shape="triangle")
+            G.add_edge(node_dict[v1], node_dict[v2])
+
+        return G
+
+    def save_graph(self, out_file):
+        plt.clf()
+        graph = self.get_nx()
+        nx.draw(graph)
+        plt.savefig(out_file)
 
 
 class Feature(object):
@@ -130,25 +210,15 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
     features: array-like.
     """
 
-    models = []
     logger.info("Extracting dataset")
     dataset = resolve_dataset(model, dataset_root)
 
-    if isinstance(dataset, TransformerDataset):
-        transformer = dataset.transformer
-        dataset = dataset.raw
-        logger.info("Found transformer of type %s" % type(transformer))
-        models.append(transformer)
-    else:
-        transformer = None
-
-    transposed = isinstance(dataset, MRI_Transposed)
-
-    models.append(model)
+    ms = ModelStructure(model, dataset)
+    models = ms.get_ordered_list()
 
     logger.info("Getting activations for model of type %s and model %s"
                 % (type(model), dataset.dataset_name))
-    data = dataset.get_design_matrix()
+    data = ms.dataset.get_design_matrix()
     X = sharedX(data)
 
     feature_dict = {}
@@ -158,7 +228,7 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
             F = downward_message(F, model_below)
         X = upward_message(X, model)
 
-        if transposed:
+        if ms.transposed():
             f = Features(X.T, F, **stats)
         else:
             f = Features(F, X.T, **stats)
