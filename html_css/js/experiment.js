@@ -553,6 +553,9 @@ function updateFromJSON(json, wd) {
     var last_processed = json.last_processed;
 
     function updateInfo(info, info_div) {
+	while (info_div.firstChild) {
+	    info_div.removeChild(info_div.firstChild);
+	}
 	var str = JSON.stringify(info, undefined, 2);
 	str = str.replace(/"/g,"");
 	str = str.replace(/,/g,"");
@@ -562,7 +565,7 @@ function updateFromJSON(json, wd) {
 	str = str.replace(/\[/g,"");
 	str = str.replace(/\]/g,"");
 	str = str.replace(/^([^0-9]*:)(.*)$/g, "<b>$1</b>$2");
-	str = str.replace(/__builder__/g,"constructor");
+	str = str.replace(/__builder__/g, "constructor");
 	str = linkUp(str, ": ");
 	var pre = document.createElement("pre");
 	pre.innerHTML = str;
@@ -708,8 +711,8 @@ function updateAll(wd) {
 	success: function (json) {
 	    updateFromJSON(json, wd);
 	    var now = new Date();
-	    var last_updated = document.getElementById("last_updated");
-	    last_updated.innerHTML = now;
+//	    var last_updated = document.getElementById("last_updated");
+//	    last_updated.innerHTML = now;
 	}
     });
 }
@@ -725,7 +728,7 @@ function periodicUpdate(wd) {
 	    getAnalysis(".");
 
 	    var now = new Date();
-	    var last_updated = document.getElementById("last_updated");
+//	    var last_updated = document.getElementById("last_updated");
 //TODO	    last_updated.innerHTML = "(Last updated: " + now + ")";
 	},
 	complete: function() {

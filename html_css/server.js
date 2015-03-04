@@ -12,6 +12,8 @@ var sources = require(lib_path);
 var express = sources.express;
 var bodyParser = sources.bodyParser;
 var Bookshelf = sources.Bookshelf;
+var fs = sources.fs;
+var zmq = sources.zmq;
 
 var server = express();
 sources.redirect(server);
@@ -165,7 +167,7 @@ server.post('/processme', function(req, res) {
         } catch(er) {
             res.send(JSON.stringify({response: er}));
             is_processing[port] = false;
-            console.log("Error processing");
+            console.log(er);
         }
     } else {
         console.log("Got redundant request");

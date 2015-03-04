@@ -278,7 +278,6 @@ class LogHandler(object):
             for channel in channels:
                 self.d["logs"][group][channel] = []
         self.logger.info("Channels: %r" % self.d["logs"].keys())
-        assert "y_misclass" in self.d["logs"].keys()
 
     def add_value(self, channel, value):
         """
@@ -582,7 +581,9 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         lh.logger.info("Proces id is %d" % pid)
 
         # If any pdfs are in out_path, kill or quit
-        if ask and len(glob.glob(path.join(out_path, "*.pdf"))) > 0:
+        json_file = path.join(out_path, "analysis.json")
+        if (ask and (path.isfile(json_file) or
+                     len(glob.glob(path.join(out_path, "*.pkl"))) > 0)):
             print ("Results found in %s "
                    "Proceeding will erase." % out_path)
             command = None
@@ -594,11 +595,19 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
                     exit()
                 else:
                     print ("Please enter yes(y) or no(n)")
-            for pdf in glob.glob(path.join(out_path, "*.pdf")):
-                print "Removing %s" % pdf
-                os.remove(pdf)
+            if path.isfile(json_file):
+                with open(json_file) as f:
+                    models = json.load(f)
+                    for model in models.keys():
+                        lh.logger.info("Removing results for model %s" % model)
+                        try:
+                            os.rmdir(path.join(out_path, "%s_images" % model))
+                        except:
+                            pass
+                os.remove(json_file)
+
             for pkl in glob.glob(path.join(out_path, "*.pkl")):
-                print "Removing %s" % pkl
+                lh.logger.info("Removing %s" % pkl)
                 os.remove(pkl)
 
         lh.logger.info("Making the train object")
@@ -606,7 +615,6 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         yaml_template = open(experiment.yaml_file).read()
         yaml = yaml_template % hyper_parameters
         train_object = yaml_parse.load(yaml)
-        return train_object
 
         lh.write_json()
 
