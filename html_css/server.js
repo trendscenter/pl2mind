@@ -9,8 +9,9 @@ console.log("Libraries at " + lib_path);
 console.log("pl2mind path at " + pl2mind_path)
 
 var sources = require(lib_path);
-var express = sources.express
-var bodyParser = sources.bodyParser
+var express = sources.express;
+var bodyParser = sources.bodyParser;
+var Bookshelf = sources.Bookshelf;
 
 var server = express();
 sources.redirect(server);
@@ -88,6 +89,17 @@ server.get("/*/$", function(request, response) {
 
 server.get(path.resolve("./") + "(/*/model.json)$", function(request, response) {
     console.log("Model json request: " + path.resolve("./") + request.params[0]);
+    fs.exists(path.resolve("./") + request.params[0], function(exists) {
+        if (exists) {
+            response.sendFile(path.resolve("./") + request.params[0]);
+        } else {
+            response.status(404).send("Not found");
+        }
+    });
+});
+
+server.get(path.resolve("./") + "(/*/analysis.json)$", function(request, response) {
+    console.log("Analysis json request: " + path.resolve("./") + request.params[0]);
     fs.exists(path.resolve("./") + request.params[0], function(exists) {
         if (exists) {
             response.sendFile(path.resolve("./") + request.params[0]);

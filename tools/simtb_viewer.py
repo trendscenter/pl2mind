@@ -18,7 +18,7 @@ logger = logging.getLogger("pl2mind")
 
 def make_spatial_map_image(spatial_map, fig=None, out_file=None):
     if fig is None:
-        fig = plt.figure()
+        fig = plt.figure(figsize=(10, 10))
 
     assert spatial_map.shape[2] == 1
     spatial_map = spatial_map.reshape(*spatial_map.shape[:2])
@@ -28,7 +28,8 @@ def make_spatial_map_image(spatial_map, fig=None, out_file=None):
     plt.imshow(spatial_map)
     if out_file is not None:
         logger.info("Saving montage to %s" % out_file)
-        plt.savefig(out_file)
+        plt.savefig(out_file, bbox_inches="tight")
+        plt.close()
     else:
         plt.draw()
 

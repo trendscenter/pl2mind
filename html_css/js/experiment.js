@@ -53,6 +53,12 @@ function clearModalBody() {
     return modal_body;
 }
 
+function switchFeatureModal(obj) {
+    console.log(obj);
+    var modal_body = clearModalBody();
+    modal_body.innerHTML = obj.index;
+}
+
 function switchInfoModal(title, info) {
     var modal_title = document.getElementById("modal_title");
     modal_title.innerHTML = title;
@@ -381,12 +387,16 @@ function makeLayout(body, json, wd) {
     var secondary_tab = makeTab("secondary", "Secondary Stats", false);
     ul.appendChild(secondary_tab);
 
+    var analysis_tab = makeTab("analysis", "Analysis", false);
+    ul.appendChild(analysis_tab);
+
+    /*
     for (var result in results) {
 	var result_tab = makeTab(result,
 				 result.charAt(0).toUpperCase() +
 				 result.slice(1), false);
 	ul.appendChild(result_tab);
-    }
+    }*/
 
     var tab_content = document.createElement("div");
     tab_content.className = "tab-content";
@@ -430,6 +440,13 @@ function makeLayout(body, json, wd) {
 				    rois.length, false);
     tab_content.appendChild(secondary_plots);
 
+    console.log("Making analysis div");
+    var analysis = document.createElement("div");
+    analysis.id = "analysis";
+    analysis.className = "tab-pane fade";
+    tab_content.appendChild(analysis);
+
+    /*
     for (var result in results) {
 	var result_div = document.createElement("div");
 	result_div.role = "tabpanel";
@@ -439,7 +456,7 @@ function makeLayout(body, json, wd) {
 	pdf_div.innerHTML = "Loading...";
 	result_div.appendChild(pdf_div);
 	tab_content.appendChild(result_div);
-    }
+    }*/
 
     var modal = makeModal(wd, port);
     makeButtons(wd, json, port);
@@ -466,6 +483,61 @@ function updatePdf(result, location, wd) {
 				   " not found. Try Processing</div>");
 	}
     });
+}
+
+function updateAnalysis(json, wd) {
+    console.log("Updating analysis");
+    var analysis = document.getElementById("analysis");
+    while (analysis.firstChild) {
+	analysis.removeChild(analysis.firstChild);
+    }
+
+    function plot_image(image, id) {
+	var data = [[[image, 0, 0, 10, 10]]];
+	var options = {
+	    series: {
+		images: {
+		    margin: 0,
+		    show: true
+		}
+	    },
+	    xaxis: {
+		show: false
+	    },
+	    yaxis: {
+		show: false
+	    },
+	    grid: {
+		borderWidth: 0,
+		minBorderMargin: 5
+	    }
+	};
+
+	$.plot.image.loadDataImages(data, options, function () {
+	    $.plot("#" + id, data, options);
+	});
+    }
+
+    for (var model in json) {
+	var div = document.createElement("div");
+	div.className = "features_div";
+	analysis.appendChild(div);
+	for (var feature in json[model].features) {
+	    var fdiv = document.createElement("div");
+	    fdiv.className = "feature_div";
+	    fdiv.id = "feature_" + feature.toString();
+	    fdiv.href = "#";
+	    fdiv.setAttribute("data-toggle", "modal");
+	    fdiv.setAttribute("data-target", "#confirmModal");
+	    fdiv.setAttribute("num", feature);
+	    fdiv.onclick = function() {
+		switchFeatureModal(json[model].features[this.getAttribute("num")]);
+	    }
+	    plot_image(json[model].features[feature].image, fdiv.id);
+	    //fdiv.innerHTML = json[model].features[feature].index;
+	    div.appendChild(fdiv);
+	}
+    }
 }
 
 function updateFromJSON(json, wd) {
@@ -534,15 +606,6 @@ function updateFromJSON(json, wd) {
 	    stat = stats[s];
 	    values = group[stat];
 	    var label;
-	    /*if (stat.indexOf("train") > -1) {
-		label = "train";
-	    } else if (stat.indexOf("valid") > -1) {
-		label = "valid";
-	    } else if (stat.indexOf("test") > -1) {
-		label = "test";
-	    } else {
-		label = stat;
-	    }*/
 	    label = stat;
 
 	    for (var i = 0; i < values.length; ++i) {
@@ -593,10 +656,10 @@ function updateFromJSON(json, wd) {
 	group = logs[extras[g]];
 	plotGroup(group, g + rois.length);
     }
-
+    /*
     for (var result in results) {
 	updatePdf(result, results[result], wd);
-    }
+    }*/
 
     $("<div id='tooltip'></div>").css({
 	position: "absolute",
@@ -617,6 +680,22 @@ function setLayout(body, wd) {
 	dataType: "json",
 	success: function (json) {
 	    makeLayout(body, json, wd);
+	}
+    });
+}
+
+function getAnalysis(wd) {
+    console.log("Getting analysis");
+    $.ajax({
+	url: wd + "/analysis.json",
+	type: "GET",
+	dataType: "json",
+	success: function (json) {
+	    console.log("Found analysis json");
+	    updateAnalysis(json, wd);
+	},
+	error: function() {
+	    console.log("Error on analysis");
 	}
     });
 }
@@ -643,6 +722,8 @@ function periodicUpdate(wd) {
 	dataType: "json",
 	success: function (json) {
 	    updateFromJSON(json, wd);
+	    getAnalysis(".");
+
 	    var now = new Date();
 	    var last_updated = document.getElementById("last_updated");
 //TODO	    last_updated.innerHTML = "(Last updated: " + now + ")";
