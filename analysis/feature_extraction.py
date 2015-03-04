@@ -126,17 +126,23 @@ class Feature(object):
 
 
 class Features(object):
-    def __init__(self, F, X, name="", idx=None, **stats):
-        assert F.shape.eval()[0] == X.shape.eval()[0]
+    def __init__(self, F, X, name="", transposed=False, idx=None, **stats):
 
         if idx is None:
             idx = range(F.shape.eval()[0])
+            assert F.shape.eval()[0] == X.shape.eval()[0], (
+                "Shape mismatch: %s vs %s" % (F.shape.eval(), X.shape.eval())
+            )
         else:
             idx = idx.eval()
 
         self.name = name
-        self.spatial_maps = F.eval()
-        self.activations = X.eval()[idx]
+        if transposed:
+            self.spatial_maps = F.eval()[idx]
+            self.activations = X.eval()
+        else:
+            self.spatial_maps = F.eval()
+            self.activations = X.eval()[idx]
 
         self.f = {}
         for i, j in enumerate(idx):
@@ -229,7 +235,7 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
         X = upward_message(X, model)
 
         if ms.transposed():
-            f = Features(X.T, F, **stats)
+            f = Features(X.T, F, transposed=True, **stats)
         else:
             f = Features(F, X.T, **stats)
 
