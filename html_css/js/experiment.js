@@ -53,10 +53,83 @@ function clearModalBody() {
     return modal_body;
 }
 
-function switchFeatureModal(obj) {
-    console.log(obj);
+function plot_image(image, id) {
+    var data = [[[image, 0, 0, 10, 10]]];
+    var options = {
+	series: {
+    	images: {
+		margin: 0,
+	        show: true
+    	}
+	},
+        xaxis: {
+	    show: false
+	},
+        yaxis: {
+	    show: false
+	},
+	grid: {
+	    borderWidth: 0,
+	    minBorderMargin: 5
+	}
+    };
+
+    $.plot.image.loadDataImages(data, options, function () {
+	$.plot("#" + id, data, options);
+    });
+}
+
+function switchFeatureModal(obj, wd) {
+
+    function bar_plot(id, bins, edges) {
+	data = [];
+	ticks = [];
+	for (var i = 0; i < bins.length; ++i) {
+	    data.push([i, bins[i]]);
+	    if (i % (bins.length / 5) == 0) {
+		ticks.push([i, (.5 * (edges[i] + edges[i+1])).toPrecision(2)])
+	    }
+	}
+
+        console.log(ticks);
+    	options = {
+	    bars: {
+		show: true
+	    },
+	    xaxis: {
+		min: 0,
+		max: bins.length,
+		ticks: ticks
+	    }
+	}
+
+	$.plot("#" + id, [data], options);
+    }
+
+    var modal_title = document.getElementById("modal_title");
+    modal_title.innerHTML = "Feature " + obj.index.toString();
+
     var modal_body = clearModalBody();
-    modal_body.innerHTML = obj.index;
+
+    var fdiv = document.createElement("div");
+    fdiv.className = "feature_div_big";
+    fdiv.id = "feature";
+    modal_body.appendChild(fdiv);
+    plot_image(wd + "/" + obj.image, fdiv.id);
+
+    for (var hist in obj.hists) {
+	var hist_container = document.createElement("div");
+	hist_container.className = "hist_container";
+	var h = document.createElement("h3");
+	h.innerHTML = hist;
+	hist_container.appendChild(h);
+	modal_body.appendChild(hist_container);
+	var hdiv = document.createElement("div");
+	hist_container.appendChild(hdiv);
+	hdiv.className = "hist_plot";
+	hdiv.id = hist;
+	bar_plot(hdiv.id, obj.hists[hist]["bins"], obj.hists[hist]["edges"]);
+    }
 }
 
 function switchInfoModal(title, info) {
@@ -285,6 +358,7 @@ function makeButtons(wd, json, port) {
 }
 
 function makePlots(group, id, title, start_idx, active) {
+    console.log("Making plots for " + id);
     // Make plot divs.
     var div = document.createElement("div");
 
@@ -309,6 +383,7 @@ function makePlots(group, id, title, start_idx, active) {
 	div1.appendChild(h1);
 	var div = document.createElement("div");
 	div.id = "plot" + id.toString();
+	console.log("Making plot with id " + div.id);
 	div.className = "plot_div";
 	div1.appendChild(div);
 	return div1;
@@ -444,6 +519,7 @@ function makeLayout(body, json, wd) {
     var analysis = document.createElement("div");
     analysis.id = "analysis";
     analysis.className = "tab-pane fade";
+    analysis.innerHTML = "None processed";
     tab_content.appendChild(analysis);
 
     /*
@@ -492,32 +568,6 @@ function updateAnalysis(json, wd) {
 	analysis.removeChild(analysis.firstChild);
     }
 
-    function plot_image(image, id) {
-	var data = [[[image, 0, 0, 10, 10]]];
-	var options = {
-	    series: {
-		images: {
-		    margin: 0,
-		    show: true
-		}
-	    },
-	    xaxis: {
-		show: false
-	    },
-	    yaxis: {
-		show: false
-	    },
-	    grid: {
-		borderWidth: 0,
-		minBorderMargin: 5
-	    }
-	};
-
-	$.plot.image.loadDataImages(data, options, function () {
-	    $.plot("#" + id, data, options);
-	});
-    }
-
     for (var model in json) {
 	var div = document.createElement("div");
 	div.className = "features_div";
@@ -531,9 +581,10 @@ function updateAnalysis(json, wd) {
 	    fdiv.setAttribute("data-target", "#confirmModal");
 	    fdiv.setAttribute("num", feature);
 	    fdiv.onclick = function() {
-		switchFeatureModal(json[model].features[this.getAttribute("num")]);
+		switchFeatureModal(
+		    json[model].features[this.getAttribute("num")], wd);
 	    }
-	    plot_image(json[model].features[feature].image, fdiv.id);
+	    plot_image(wd + "/" + json[model].features[feature].image, fdiv.id);
 	    //fdiv.innerHTML = json[model].features[feature].index;
 	    div.appendChild(fdiv);
 	}
@@ -632,7 +683,6 @@ function updateFromJSON(json, wd) {
             downsample: { threshold: 100 }
         };
 	var placeholder = $("#plot" + id.toString());
-	console.log("Actual plot");
 	$.plot(placeholder, plot_data, options);
 
 	placeholder.bind("plothover", function (event, pos, item) {
@@ -725,7 +775,7 @@ function periodicUpdate(wd) {
 	dataType: "json",
 	success: function (json) {
 	    updateFromJSON(json, wd);
-	    getAnalysis(".");
+	    getAnalysis(wd);
 
 	    var now = new Date();
 //	    var last_updated = document.getElementById("last_updated");

@@ -33,11 +33,11 @@
 
 
 .modal-dialog {
-    width: 40%; /* respsonsive width */
+    width: auto;
 }
 
 .modal-dialog.large {
-    width: 80%; /* respsonsive width */
+    width: 80%;
 }
 
 .param_div {
@@ -78,6 +78,25 @@
     width: 600px;
 }
 
+.hist_container {
+    vertical-align: top;
+    border: 1px solid #a1a1a1;
+    border-radius: 5px;
+    display: inline-block;
+    width: 450px;
+    height: auto;
+    padding-left: 5px;
+    margin-left: 20px;
+    margin-bottom: 20px;
+}
+
+.hist_plot {
+    height: 200px;
+    width: 400px;
+    margin-left: 20px;
+    margin-bottom: 20px;
+}
+
 .features_div {
     width: auto;
     border: 2px solid #a1a1a1;
@@ -93,6 +112,16 @@
     margin: 5px 5px 5px 5px;
     width: 80px;
     height: 80px;
+    display: inline-block;
+}
+
+.feature_div_big {
+    vertical-align: top;
+    border: 1px solid #a1a1a1;
+    border-radius: 5px;
+    margin: 20px 20px 20px 20px;
+    width: 250px;
+    height: 250px;
     display: inline-block;
 }
 

@@ -159,6 +159,7 @@ $(document).ready(function () {
                     while (modal_content.firstChild) {
                         modal_content.removeChild(modal_content.firstChild);
                     }
+		    console.log(p);
                     setLayout(modal_content, p);
                     periodicUpdate(p);
                 },
