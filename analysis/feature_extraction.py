@@ -122,6 +122,7 @@ class ModelStructure(object):
 class Feature(object):
     def __init__(self, j):
         self.stats = {}
+        self.match_indices = {}
         self.id = j
 
 
@@ -129,20 +130,23 @@ class Features(object):
     def __init__(self, F, X, name="", transposed=False, idx=None, **stats):
 
         if idx is None:
-            idx = range(F.shape.eval()[0])
-            assert F.shape.eval()[0] == X.shape.eval()[0], (
-                "Shape mismatch: %s vs %s" % (F.shape.eval(), X.shape.eval())
+            idx = range(F.shape[0])
+            assert F.shape[0] == X.shape[0], (
+                "Shape mismatch: %s vs %s" % (F.shape, X.shape)
             )
         else:
-            idx = idx.eval()
+            if isinstance(idx, list):
+                idx = idx
+            else:
+                idx = idx.eval()
 
         self.name = name
         if transposed:
-            self.spatial_maps = F.eval()[idx]
-            self.activations = X.eval()
+            self.spatial_maps = F[idx]
+            self.activations = X
         else:
-            self.spatial_maps = F.eval()
-            self.activations = X.eval()[idx]
+            self.spatial_maps = F
+            self.activations = X[idx]
 
         self.f = {}
         for i, j in enumerate(idx):
@@ -170,6 +174,20 @@ class Features(object):
                         "exist, but setting to 0.")
             self.spatial_maps[self.spatial_maps > self.spatial_maps.mean()
                               + 5 * self.spatial_maps.std()] = 0
+
+    def set_histograms(self, bins=100, tolist=False):
+        for k, f in self.f.iteritems():
+            sm_bins, sm_edges = np.histogram(self.spatial_maps[k], bins=bins)
+            act_bins, act_edges = np.histogram(self.activations[k], bins=bins)
+            f.hists = dict()
+            f.hists["sm_hists"] = dict(
+                bins=sm_bins.tolist() if tolist else sm_bins,
+                edges=sm_edges.tolist() if tolist else sm_edges
+            )
+            f.hists["act_hists"] = dict(
+                bins=act_bins.tolist() if tolist else act_bins,
+                edges=act_edges.tolist() if tolist else act_edges
+            )
 
 
 def resolve_dataset(model, dataset_root=None, **kwargs):
@@ -235,9 +253,9 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
         X = upward_message(X, model)
 
         if ms.transposed():
-            f = Features(X.T, F, transposed=True, **stats)
+            f = Features(X.T,eval(), F.eval(), transposed=True, **stats)
         else:
-            f = Features(F, X.T, **stats)
+            f = Features(F.eval(), X.T.eval(), **stats)
 
         feature_dict[stats["name"]] = f
 

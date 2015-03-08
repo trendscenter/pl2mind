@@ -5,8 +5,12 @@ TODO: handle functional aspects for fMRI here.
 
 import functools
 import logging
+
+from nibabel.affines import apply_affine
 from nipy import load_image
 from nipy.core.api import Image
+from nipy.core.reference.coordinate_map import AffineTransform
+
 import numpy as np
 from os import path
 
@@ -192,6 +196,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         label_path = serial.preprocess(label_path)
         try:
             self.base_nifti = load_image(serial.preprocess(nifti_path))
+            logger.info("Loaded nifti")
         except IOError:
             self.base_nifti = None
             logger.warn("`base.nii` not in dataset directory. "
@@ -269,9 +274,6 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         if self.view_converter is None:
             raise NotImplementedError("Tried to call get_weights_view on a "
                             "dataset that has no view converter.")
-#        if self.X.shape[1] != mat.shape[1]:
-#            raise ValueError("mat samples have different size than data: "
-#                             "%d vs %d" % (mat.shape[1], self.X.shape[1]))
         weights_view = self.view_converter.design_mat_to_weights_view(mat)
         return weights_view
 
@@ -329,36 +331,33 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
 
         return topo_view
 
-    def get_nifti(self, topo_view, base_nifti=None):
+    def get_nifti(self, topo_view, base_nifti=None, **kwargs):
         """
         Process the nifti
 
         Parameters
         ----------
         topo_view: array-like
-            Topological view to create nifti. 4D.
+            Topological view to create nifti. 3D.
 
         Returns
         -------
         image: nipy image
             Nifti image from topological view.
         """
-        m, r, c, d = topo_view.shape
-
-        if basenifti is None:
+        if base_nifti is None:
             assert self.base_nifti is not None, ("`base.nii` not in dataset "
                                                  "directory. You may need to "
                                                  "reprocess.")
             base_nifti = self.base_nifti
+            image = Image.from_image(base_nifti, data=topo_view)
         else:
+            if isinstance(base_nifti, str):
+                base_nifti = load_image(base_nifti)
             base2new_affine = np.linalg.inv(
-                base_nifti.get_affine()).dot(self.base_nifti.get_affine())
-
-        #image = Image.from_image(base_nifti,
-        #                         data=topo_view.transpose((1, 2, 3, 0)))
-
-        image = Image.from_image(base_nifti,
-                                 data=topo_view[0])
+                base_nifti.affine).dot(self.base_nifti.affine)
+            cmap = AffineTransform("kji", "zxy", base2new_affine)
+            image = Image.from_image(base_nifti, data=topo_view, coordmap=cmap)
 
         return image
 

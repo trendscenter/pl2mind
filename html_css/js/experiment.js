@@ -79,8 +79,7 @@ function plot_image(image, id) {
     });
 }
 
-function switchFeatureModal(obj, wd) {
-
+function add_feature_to_modal(id, obj, wd, div) {
     function bar_plot(id, bins, edges) {
 	data = [];
 	ticks = [];
@@ -91,7 +90,6 @@ function switchFeatureModal(obj, wd) {
 	    }
 	}
 
-        console.log(ticks);
     	options = {
 	    bars: {
 		show: true
@@ -106,29 +104,44 @@ function switchFeatureModal(obj, wd) {
 	$.plot("#" + id, [data], options);
     }
 
-    var modal_title = document.getElementById("modal_title");
-    modal_title.innerHTML = "Feature " + obj.index.toString();
-
-    var modal_body = clearModalBody();
-
+    var container = document.createElement("div");
+    div.appendChild(container);
+    container.className = "feature_container";
     var fdiv = document.createElement("div");
     fdiv.className = "feature_div_big";
-    fdiv.id = "feature";
-    modal_body.appendChild(fdiv);
+    fdiv.id = id + "_feature";
+    container.appendChild(fdiv);
+
     plot_image(wd + "/" + obj.image, fdiv.id);
 
     for (var hist in obj.hists) {
 	var hist_container = document.createElement("div");
+	container.appendChild(hist_container);
 	hist_container.className = "hist_container";
 	var h = document.createElement("h3");
 	h.innerHTML = hist;
 	hist_container.appendChild(h);
-	modal_body.appendChild(hist_container);
 	var hdiv = document.createElement("div");
 	hist_container.appendChild(hdiv);
 	hdiv.className = "hist_plot";
-	hdiv.id = hist;
+	hdiv.id = id + "_" + hist;
 	bar_plot(hdiv.id, obj.hists[hist]["bins"], obj.hists[hist]["edges"]);
+    }
+
+}
+
+function switchFeatureModal(obj, wd) {
+
+    var modal_title = document.getElementById("modal_title");
+    modal_title.innerHTML = "Feature " + obj.index.toString();
+
+    var modal_body = clearModalBody();
+    add_feature_to_modal("base", obj, wd, modal_body);
+
+    console.log(obj);
+    for (var match_model in obj.matched_features) {
+	add_feature_to_modal(match_model, obj.matched_features[match_model], wd,
+			     modal_body);
     }
 }
 
@@ -357,8 +370,10 @@ function makeButtons(wd, json, port) {
     periodicUpdate(wd); */
 }
 
-function makePlots(group, id, title, start_idx, active) {
+function makePlots(ul, group, id, title, start_idx, active) {
     console.log("Making plots for " + id);
+    var tab = makeTab(id, title, active);
+    ul.appendChild(tab);
     // Make plot divs.
     var div = document.createElement("div");
 
@@ -405,6 +420,7 @@ function makeTab(id, title, active) {
     if (active) {
 	li.className = "active";
     }
+    li.id = id + "_tab";
     var a = document.createElement("a");
     a.href = "#" + id;
     a.setAttribute("aria-controls", id);
@@ -449,35 +465,14 @@ function makeLayout(body, json, wd) {
     ul.className = "nav nav-tabs";
     ul.id = "myTab";
     tab_div.appendChild(ul);
-
-    var info_tab = makeTab("stats", "Model Info", true);
-    ul.appendChild(info_tab);
-
-    var hyperparams_tab = makeTab("hyperparams", "Hyperparams", false);
-    ul.appendChild(hyperparams_tab);
-
-    var primary_tab = makeTab("primary", "Primary Stats", false);
-    ul.appendChild(primary_tab);
-
-    var secondary_tab = makeTab("secondary", "Secondary Stats", false);
-    ul.appendChild(secondary_tab);
-
-    var analysis_tab = makeTab("analysis", "Analysis", false);
-    ul.appendChild(analysis_tab);
-
-    /*
-    for (var result in results) {
-	var result_tab = makeTab(result,
-				 result.charAt(0).toUpperCase() +
-				 result.slice(1), false);
-	ul.appendChild(result_tab);
-    }*/
-
     var tab_content = document.createElement("div");
     tab_content.className = "tab-content";
     tab_div.appendChild(tab_content);
 
     function makeInfoDiv(id, title, active) {
+	var tab = makeTab(id, title, active);
+	ul.appendChild(tab);
+
 	// Makes a div element for info.
 	var info_div = document.createElement("div");
 	if (active) {
@@ -487,7 +482,7 @@ function makeLayout(body, json, wd) {
 	}
 	info_div.role = "tabpanel";
 	info_div.id = id;
-	//info_div.className = "plot_group_div";
+
 	var info_title = document.createElement("div");
 	info_title.className = "info_title";
 	var hi = document.createElement("h3");
@@ -508,31 +503,32 @@ function makeLayout(body, json, wd) {
 				"Model Hyperparameters", false);
     tab_content.appendChild(param_div);
 
-    var primary_plots = makePlots(rois, "primary",
+    var primary_plots = makePlots(ul, rois, "primary",
 				  "Primary Stats", 0, false);
     tab_content.appendChild(primary_plots);
-    var secondary_plots = makePlots(extras, "secondary", "Secondary Stats",
+
+    var secondary_plots = makePlots(ul, extras, "secondary", "Secondary Stats",
 				    rois.length, false);
     tab_content.appendChild(secondary_plots);
 
-    console.log("Making analysis div");
     var analysis = document.createElement("div");
+    var anal_tab = makeTab("analysis", "Analysis", false);
+    ul.appendChild(anal_tab);
+    tab_content.appendChild(analysis);
+
     analysis.id = "analysis";
     analysis.className = "tab-pane fade";
     analysis.innerHTML = "None processed";
-    tab_content.appendChild(analysis);
-
-    /*
-    for (var result in results) {
-	var result_div = document.createElement("div");
-	result_div.role = "tabpanel";
-	result_div.id = result;
-	result_div.className = "tab-pane fade"
-	var pdf_div = document.createElement("div");
-	pdf_div.innerHTML = "Loading...";
-	result_div.appendChild(pdf_div);
-	tab_content.appendChild(result_div);
-    }*/
+    analysis.role = "tabpanel";
+    anal_ul = document.createElement("ul");
+    anal_ul.role = "tablist";
+    anal_ul.className = "nav nav-tabs";
+    anal_ul.id = "analTab";
+    analysis.appendChild(anal_ul);
+    var anal_tab_content = document.createElement("div");
+    anal_tab_content.className = "tab-content";
+    anal_tab_content.id = "anal_tab_content";
+    analysis.appendChild(anal_tab_content);
 
     var modal = makeModal(wd, port);
     makeButtons(wd, json, port);
@@ -561,32 +557,98 @@ function updatePdf(result, location, wd) {
     });
 }
 
-function updateAnalysis(json, wd) {
-    console.log("Updating analysis");
-    var analysis = document.getElementById("analysis");
-    while (analysis.firstChild) {
-	analysis.removeChild(analysis.firstChild);
+function makeFeaturesTab(id, title, active) {
+    var ul = document.getElementById("analTab");
+    var tab_content = document.getElementById("anal_tab_content");
+    console.log("Plotting features for " + id);
+    if (!document.getElementById(id + "_tab")) {
+	var tab = makeTab(id, title, active);
+	ul.appendChild(tab);
+	var model_div = document.createElement("div");
+	tab_content.appendChild(model_div);
+	model_div.className = "features_div";
+	if (active) {
+	    model_div.className = "tab-pane fade in active";
+	} else {
+	    model_div.className = "tab-pane fade";
+	}
+	model_div.role = "tabpanel";
+	model_div.id = id;
+	tab_content.appendChild(model_div);
+    } else {
+	var model_div = document.getElementById(id);
     }
 
+    while (model_div.firstChild) {
+	model_div.removeChild(model_div.firstChild);
+    }
+
+    return model_div;
+}
+
+function updateAnalysis(json, wd) {
+    console.log("Updating analysis");
+
+    function addFeature(id, obj, model, feature, div) {
+	var fdiv = document.createElement("div");
+	div.appendChild(fdiv);
+	fdiv.className = "feature_div";
+	fdiv.id = model + "_feature_" + id.toString();
+	fdiv.href = "#";
+	fdiv.setAttribute("data-toggle", "modal");
+	fdiv.setAttribute("data-target", "#confirmModal");
+	fdiv.setAttribute("model", model);
+	fdiv.setAttribute("feature", feature);
+	fdiv.onclick = function() {
+	    console.log(json[this.getAttribute("model")]);
+	    switchFeatureModal(
+		json[this.getAttribute("model")].features[
+		    this.getAttribute("feature")], wd);
+	}
+	plot_image(wd + "/" + obj.image, fdiv.id);
+	//fdiv.innerHTML = json[model].features[feature].index;
+	return fdiv;
+    }
+
+    var first = true;
     for (var model in json) {
-	var div = document.createElement("div");
-	div.className = "features_div";
-	analysis.appendChild(div);
+	var model_div = makeFeaturesTab(model, model, first);
+	first = false;
+	console.log(model_div.id)
+
+	var match_models = [];
 	for (var feature in json[model].features) {
-	    var fdiv = document.createElement("div");
-	    fdiv.className = "feature_div";
-	    fdiv.id = "feature_" + feature.toString();
-	    fdiv.href = "#";
-	    fdiv.setAttribute("data-toggle", "modal");
-	    fdiv.setAttribute("data-target", "#confirmModal");
-	    fdiv.setAttribute("num", feature);
-	    fdiv.onclick = function() {
-		switchFeatureModal(
-		    json[model].features[this.getAttribute("num")], wd);
+	    var f = json[model].features[feature];
+	    addFeature(feature, f, model, feature, model_div);
+	    var matched_features = {}
+	    for (var match_model
+		 in json[model].features[feature].match_indices) {
+		if ($.inArray(match_model, match_models) == -1) {
+		    match_models.push(match_model);
+		}
+		var i = json[model].features[feature].match_indices[match_model];
+		matched_features[match_model] = json[match_model].features[i];
 	    }
-	    plot_image(wd + "/" + json[model].features[feature].image, fdiv.id);
-	    //fdiv.innerHTML = json[model].features[feature].index;
-	    div.appendChild(fdiv);
+	    json[model].features[feature].matched_features = matched_features;
+	}
+
+	for (var match_model in match_models) {
+	    console.log(match_models[match_model]);
+	    var match_div = makeFeaturesTab(model + "_" + match_models[match_model],
+					    model + "+" + match_models[match_model], false);
+
+	    for (var feature in json[model].features) {
+		if (match_models[match_model]
+		    in json[model].features[feature].match_indices) {
+		    var match_fdiv = document.createElement("div");
+		    match_fdiv.className = "match_feature_div";
+		    match_div.appendChild(match_fdiv);
+		    var f = json[model].features[feature];
+		    addFeature("m1" + feature, f, model, feature, match_fdiv);
+		    var matched_feature = json[model].features[feature].matched_features[match_models[match_model]];
+		    addFeature("m2" + feature, matched_feature, feature, match_model, match_fdiv);
+		}
+	    }
 	}
     }
 }

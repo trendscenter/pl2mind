@@ -4,6 +4,7 @@ Note: fMRI support to be added in the future.
 """
 
 import argparse
+import json
 import logging
 from math import log
 from math import sqrt
@@ -17,6 +18,7 @@ import numpy as np
 import os
 from os import path
 
+from pl2mind import logger
 from pl2mind.datasets import dataset_info
 from pl2mind.datasets import MRI as MRI_module
 from pl2mind.datasets.MRI import MRI
@@ -39,7 +41,7 @@ import theano.tensor as T
 import warnings
 
 
-logger = logging.getLogger("pl2mind")
+logger = logger.setup_custom_logger("pl2mind", logging.ERROR)
 
 def set_experiment_info(model, dataset, feature_dict):
     if isinstance(dataset, TransformerDataset):
@@ -103,6 +105,17 @@ def get_nifti(dataset, features, out_file=None, split_files=False,
         #        nipy.save_image(image[:, :, :, f], out)
 
     return image
+
+def save_niftis(dataset, features, image_dir, base_nifti=None, **kwargs):
+    """
+    Saves a series of niftis.
+    """
+    logger.info("Saving mri images")
+    spatial_maps = features.spatial_maps
+    spatial_maps = dataset.get_weights_view(spatial_maps)
+    for i, feature in features.f.iteritems():
+        image = dataset.get_nifti(spatial_maps[i], base_nifti=base_nifti)
+        nipy.save_image(image, path.join(image_dir, "%d.nii.gz" % feature.id))
 
 def save_nii_montage(nifti, nifti_file, out_file,
                      anat_file=None, feature_dict=None,
@@ -177,12 +190,44 @@ def main(model, out_path=None, prefix=None, **anal_args):
     logger.info("Getting features")
     feature_dict = fe.extract_features(model, **anal_args)
 
-    for name, feature in feature_dict.iteritems():
-        nifti_path = path.join(out_path, "%s_%s.nii" % (name, nifti_prefix))
-        nifti = get_nifti(dataset, feature, out_file=nifti_path, **anal_args)
+    logger.info("Getting features")
+    feature_dict = fe.extract_features(model, **anal_args)
+    dataset = fe.resolve_dataset(model, **anal_args)
+    if isinstance(dataset, TransformerDataset):
+        dataset = dataset.raw
 
-        pdf_path = path.join(out_path, "%s_%s.pdf" % (name, sm_prefix))
-        save_nii_montage(nifti, nifti_path, pdf_path, feature)
+    anal_dict = dict()
+    for name, features in feature_dict.iteritems():
+        image_dir = path.join(out_path, "%s_images" % name)
+        if not path.isdir(image_dir):
+            os.mkdir(image_dir)
+        save_niftis(dataset, features, image_dir, **anal_args)
+
+        features.set_histograms(tolist=True)
+        fds = dict()
+        for k, f in features.f.iteritems():
+            fd = dict(
+                image=path.join("%s_images" % name, "%d.png" % f.id),
+                index=f.id,
+                hists=f.hists
+            )
+            fd.update(**f.stats)
+
+            fds[k] = fd
+
+        anal_dict[name] = dict(
+            name=name,
+            image_dir=image_dir,
+            features=fds
+        )
+
+    ms = fe.ModelStructure(model, dataset)
+    #anal_dict["graph"] = nx.node_link_data(fe.get_nx())
+
+    json_file = path.join(out_path, "analysis.json")
+    with open(json_file, "w") as f:
+        json.dump(anal_dict, f)
+
     logger.info("Done.")
 
 def make_argument_parser():
@@ -220,7 +265,7 @@ if __name__ == "__main__":
         target_stat=args.target_stat,
         max_features=args.max_features,
         dataset_root=args.dataset_root,
-        base_nifti=base_nifti
+        base_nifti=args.base_nifti
     )
 
     main(args.model_path, args.out_dir, args.prefix, **anal_args)

@@ -14,8 +14,10 @@ var bodyParser = sources.bodyParser;
 var Bookshelf = sources.Bookshelf;
 var fs = sources.fs;
 var zmq = sources.zmq;
+var jade = sources.jade;
 
 var server = express();
+server.set("view engine", "jade");
 sources.redirect(server);
 server.listen(port);
 var router = express.Router();
@@ -25,8 +27,31 @@ server.use(bodyParser.json());
 server.use(bodyParser.urlencoded({extended: true}));
 server.use("/lib", express.static(lib_path));
 server.use("/pl2mind", express.static(pl2mind_path));
+server.use("/ns",
+           express.static("/na/homes/dhjelm/Code/nsviewer/example/"))
 
 console.log("Server started. Root directory is " + path.resolve("./"));
+
+var nifti = "";
+
+server.get("/nifti_file", function(request, response) {
+    response.sendFile(nifti);
+});
+
+server.get("/image/*.nii.gz", function (request, response)
+{
+    console.log(request.params);
+    nifti = path.resolve("./") + "/" + request.params[0] + ".nii.gz";
+    response.sendFile("/na/homes/dhjelm/Code/nsviewer/example/index.html");
+});
+
+/*
+server.get("/image", function(req, res) {
+  res.render("nifti_index", {}, function(err, html) {
+    console.log(html);
+    res.send(html);
+  })
+})*/
 
 var table_data;
 
