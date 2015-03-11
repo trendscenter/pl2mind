@@ -19,6 +19,7 @@ from os import path
 import pickle
 
 from pl2mind.analysis import feature_extraction as fe
+from pl2mind.datasets import MRI
 from pl2mind import logger
 from pl2mind.tools import simtb_viewer
 from pylearn2.datasets.transformer_dataset import TransformerDataset
@@ -68,18 +69,19 @@ def match_to_gt(p, gt, method="munkres", discard_misses=False):
     assert p.shape[1] == gt.shape[1], (
         "Shapes do not match (%s vs %s)" % (p.shape, gt.shape)
     )
+
     match_size = min(p.shape[0], gt.shape[0])
-    corrs = np.corrcoef(p, gt)[match_size:,:match_size]
+    corrs = np.corrcoef(p, gt)[match_size:, :match_size]
     corrs[np.isnan(corrs)] = 0
 
     if method == "munkres":
         m = Munkres()
         cl = 1 - np.abs(corrs)
         if (cl.shape[0] > cl.shape[1]):
-            inds_r = m.compute(cl.T)
-            indices = [(i[1], i[0]) for i in inds_r]
+            indices = m.compute(cl.T)
         else:
             indices = m.compute(cl)
+            indices = [(i[1], i[0]) for i in inds_r]
 
     elif method == "greedy":
         gt_idx = []
@@ -98,15 +100,19 @@ def analyze_ground_truth(feature_dict, ground_truth_dict, dataset):
     """
     Compare models to ground truth.
     """
+    print ground_truth_dict[0]["SM"].shape
+    print dataset.view_converter.shape
     gt_topo_view = ground_truth_dict[0]["SM"].reshape(
         (ground_truth_dict[0]["SM"].shape[0], ) +
         dataset.view_converter.shape).transpose(0, 2, 1, 3)
     gt_spatial_maps =  dataset.get_design_matrix(gt_topo_view)
+    if isinstance(dataset, MRI.MRI_Transposed) :
+        gt_spatial_maps = gt_spatial_maps.T
     gt_activations = ground_truth_dict[0]["TC"]
 
     for name, features in feature_dict.iteritems():
         logger.info("Analyzing %s compared to ground truth" % name)
-        indices = match_to_gt(gt_spatial_maps, features.spatial_maps)
+        indices = match_to_gt(features.spatial_maps, gt_spatial_maps)
         for fi, gi in indices:
             features.f[fi].match_indices["ground_truth"] = gi
 
