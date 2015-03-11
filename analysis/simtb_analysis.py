@@ -164,7 +164,7 @@ def main(model, out_path=None, prefix=None, **anal_args):
         dataset = dataset.raw
 
     ms = fe.ModelStructure(model, dataset)
-    data_path = serial.preprocess(dataset.dataset_root + dataset.dataset_name)
+    data_path = serial.preprocess(dataset.dataset_root + "/" + dataset.dataset_name)
     sim_dict_file = path.join(data_path, "sim_dict.pkl")
     sim_dict = pickle.load(open(sim_dict_file, "r"))
     analyze_ground_truth(feature_dict, sim_dict, dataset)
