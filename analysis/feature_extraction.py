@@ -254,7 +254,7 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
         X = upward_message(X, model)
 
         if ms.transposed():
-            f = Features(X.T,eval(), F.eval(), transposed=True, **stats)
+            f = Features(X.T.eval(), F.eval(), transposed=True, **stats)
         else:
             f = Features(F.eval(), X.T.eval(), **stats)
 
