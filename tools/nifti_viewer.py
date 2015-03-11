@@ -1,36 +1,43 @@
 import argparse
+import itertools
+import logging
 from math import ceil
 
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use("Agg")
 from matplotlib.patches import FancyBboxPatch
 from matplotlib import pylab as plt
 from matplotlib import rc
+import multiprocessing as mp
 
 from nipy import load_image
 from nipy.core.api import xyz_affine
 from nipy.labs.viz import plot_map
 
 import numpy as np
-from sys import stdout
+from os import path
+from pl2mind import logger
 import pickle
+from sys import stdout
 
 
-cdict = {'red': ((0.0, 0.0, 0.0),
+logger = logging.getLogger("pl2mind")
+
+cdict = {"red": ((0.0, 0.0, 0.0),
                  (0.25, 0.2, 0.2),
                  (0.45, 0.0, 0.0),
                  (0.5, 0.5, 0.5),
                  (0.55, 0.0, 0.0),
                  (0.75, 0.8, 0.8),
                  (1.0,  1.0, 1.0)),
-         'green': ((0.0, 0.0, 1.0),
+         "green": ((0.0, 0.0, 1.0),
                    (0.25, 0.0, 0.0),
                    (0.45, 0.0, 0.0),
                    (0.5, 0.5, 0.5),
                    (0.55, 0.0, 0.0),
                    (0.75, 0.0, 0.0),
                    (1.0,  1.0, 1.0)),
-         'blue':  ((0.0, 0.0, 1.0),
+         "blue":  ((0.0, 0.0, 1.0),
                    (0.25, 0.8, 0.8),
                    (0.45, 0.0, 0.0),
                    (0.5, 0.5, 0.5),
@@ -38,7 +45,65 @@ cdict = {'red': ((0.0, 0.0, 0.0),
                    (0.75, 0.0, 0.0),
                    (1.0,  0.0, 0.0)),}
 
-cmap = matplotlib.colors.LinearSegmentedColormap('my_colormap',cdict,256)
+cmap = matplotlib.colors.LinearSegmentedColormap("my_colormap", cdict, 256)
+
+def save_image(nifti_file, anat, cluster_dict, out_path, f, image_threshold=1,
+               texcol=1, bgcol=0, iscale=2):
+    nifti = load_image(nifti_file)
+    feature = nifti.get_data()
+    font = {"size":8}
+    rc("font", **font)
+
+    coords = cluster_dict["top_clust"]["coords"]
+    if coords == None:
+        logger.warning("No cluster found for %s" % nifti_file)
+        return
+
+    feature /= feature.std()
+    imax = np.max(np.absolute(feature))
+    imin = -imax
+    imshow_args = {"vmax": imax, "vmin": imin}
+
+    coords = ([-coords[0], -coords[1], coords[2]])
+
+    #ax = fig.add_subplot(1, 1, 1)
+    plt.axis("off")
+
+    try:
+        plot_map(feature,
+                 xyz_affine(nifti),
+                 anat=anat.get_data(),
+                 anat_affine=xyz_affine(anat),
+                 threshold=image_threshold,
+                 cut_coords=coords,
+                 annotate=False,
+                 cmap=cmap,
+                 draw_cross=False,
+                 **imshow_args)
+    except Exception as e:
+        logger.exception(e)
+        return
+
+    plt.text(0.05, 0.8, str(f),
+             horizontalalignment="center",
+             color=(texcol, texcol, texcol))
+
+    plt.savefig(out_path, transparent=True, facecolor=(bgcol, bgcol, bgcol))
+
+def save_helper(args):
+    save_image(*args)
+
+def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
+    logger.info("Saving images to %s" % out_dir)
+    p = mp.Pool(len(nifti_files))
+    idx = [int(f.split("/")[-1].split(".")[0]) for f in nifti_files]
+    args_iter = itertools.izip(nifti_files,
+                               itertools.repeat(anat),
+                               [roi_dict[i] for i in idx],
+                               [path.join(out_dir, "%d.png" % i) for i in idx],
+                               idx)
+
+    p.map(save_helper, args_iter)
 
 def montage(nifti, anat, roi_dict, thr=2,
             fig=None, out_file=None, feature_dict=None,
@@ -55,13 +120,13 @@ def montage(nifti, anat, roi_dict, thr=2,
     weights = nifti.get_data(); #weights = weights / weights.std(axis=3)
     features = weights.shape[-1]
 
-    indices = [0]        
+    indices = [0]
     y = 8
     x = int(ceil(1.0 * features / y))
 
-    font = {'size':8}
-    rc('font',**font)
- 
+    font = {"size":8}
+    rc("font",**font)
+
     if fig is None:
         fig = plt.figure(figsize=[iscale * y, iscale * x / 2.5])
     plt.subplots_adjust(left=0.01, right=0.99, bottom=0.01, top=0.99, wspace=0.1, hspace=0)
@@ -73,41 +138,34 @@ def montage(nifti, anat, roi_dict, thr=2,
         coords = roi["top_clust"]["coords"]
         assert coords is not None
 
-#        stdout.write("\rSaving montage: %d   " % f)
-#        stdout.flush()
-            
         feat = weights[:, :, :, f]
         feat = feat / feat.std()
         imax = np.max(np.absolute(feat)); imin = -imax
-        imshow_args = {'vmax': imax, 'vmin': imin}
-         
+        imshow_args = {"vmax": imax, "vmin": imin}
 
-        # For some reason we need to do this.
         coords = ([-coords[0], -coords[1], coords[2]])
 
         ax = fig.add_subplot(x, y, f + 1)
-        plt.axis('off')
-
-        max_idx = np.unravel_index(np.argmax(feat), feat.shape)
+        plt.axis("off")
 
         try: plot_map(feat,
                       xyz_affine(nifti),
                       anat=anat.get_data(),
-                      anat_affine=xyz_affine(anat), 
+                      anat_affine=xyz_affine(anat),
                       threshold=thr,
                       figure=fig,
                       axes=ax,
                       cut_coords=coords,
                       annotate=False,
-                      cmap=cmap, 
+                      cmap=cmap,
                       draw_cross=False,
-                      **imshow_args)            
+                      **imshow_args)
         except Exception as e:
-            print e
+            logger.exception(e)
 
         plt.text(0.05, 0.8, str(f),
                  transform=ax.transAxes,
-                 horizontalalignment='center',
+                 horizontalalignment="center",
                  color=(texcol,texcol,texcol))
         pos = [(0.05, 0.05), (0.4, 0.05), (0.8, 0.05)]
         colors = ["purple", "yellow", "green"]
@@ -130,7 +188,7 @@ def montage(nifti, anat, roi_dict, thr=2,
                                                  ec=(0., 0.5, 0.),
                                                  fc="none")
                         ax.add_patch(p_fancy)
-    
+
 #    stdout.write("\rSaving montage: DONE\n")
     if out_file is not None:
         plt.savefig(out_file, transparent=True, facecolor=(bgcol, bgcol, bgcol))
@@ -161,4 +219,3 @@ if __name__ == "__main__":
     parser = make_argument_parser()
     args = parser.parse_args()
     main(args.nifti, args.anat, args.rois, args.out, args.thr)
-

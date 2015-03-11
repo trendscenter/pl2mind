@@ -128,8 +128,8 @@ class LogHandler(object):
             }
 
         self.logger = logger
-        self.logger.setLevel(logging.DEBUG)
         h = logging.StreamHandler(MetaLogHandler(self.d))
+        h.setLevel(logging.DEBUG)
         self.logger.addHandler(h)
         self.write_json()
 
@@ -362,6 +362,7 @@ class ModelProcessor(mp.Process):
     def __init__(self, experiment, checkpoint, ep,
                  flag, last_processed, logger):
         self.__dict__.update(locals())
+        self.logger.setLevel(logging.DEBUG)
         self.socket = None
 
         self.out_path = "/".join(checkpoint.split("/")[:-1])

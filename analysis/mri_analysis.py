@@ -59,8 +59,8 @@ def set_experiment_info(model, dataset, feature_dict):
     if dataset.dataset_name in dataset_info.sz_datasets:
         ttests = get_sz_info(dataset, activations)
         for feature in feature_dict:
-            feature_dict[feature]["sz_t"] =\
-            ttests[feature_dict[feature]["real_id"]][0]
+            feature_dict[feature]["sz_t"] = ttests[
+                feature_dict[feature]["real_id"]][0]
 
     if dataset.dataset_name in dataset_info.aod_datasets:
         target_ttests, novel_ttests = get_aod_info(dataset, activations)
@@ -99,10 +99,6 @@ def get_nifti(dataset, features, out_file=None, split_files=False,
     image = dataset.get_nifti(weights_view, base_nifti=base_nifti)
     if out_file is not None:
         nipy.save_image(image, out_file + ".gz")
-        #if image.shape[1] > 1:
-        #    for f in xrange(image.shape[-1]):
-        #        out = out_file.split(".")[0] + "_%d.nii.gz" % f
-        #        nipy.save_image(image[:, :, :, f], out)
 
     return image
 
@@ -116,6 +112,15 @@ def save_niftis(dataset, features, image_dir, base_nifti=None, **kwargs):
     for i, feature in features.f.iteritems():
         image = dataset.get_nifti(spatial_maps[i], base_nifti=base_nifti)
         nipy.save_image(image, path.join(image_dir, "%d.nii.gz" % feature.id))
+
+    nifti_files = [path.join(image_dir, "%d.nii.gz" % feature.id)
+                   for feature in features.f.values()]
+    roi_dict = rois.main(nifti_files)
+
+    anat_file = ("/export/mialab/users/mindgroup/Data/mrn/"
+                 "mri_extra/ch2better_aligned2EPI.nii")
+    anat = nipy.load_image(anat_file)
+    nifti_viewer.save_images(nifti_files, anat, roi_dict, image_dir, **kwargs)
 
 def save_nii_montage(nifti, nifti_file, out_file,
                      anat_file=None, feature_dict=None,
@@ -208,6 +213,7 @@ def main(model, out_path=None, prefix=None, **anal_args):
         for k, f in features.f.iteritems():
             fd = dict(
                 image=path.join("%s_images" % name, "%d.png" % f.id),
+                image_type="mri",
                 index=f.id,
                 hists=f.hists
             )
@@ -248,6 +254,7 @@ def make_argument_parser():
 
     parser.add_argument("-z", "--zscore", action="store_true")
     parser.add_argument("-t", "--target_stat", default=None)
+    parser.add_argument("-i", "--image_threshold", default=2)
     parser.add_argument("-m", "--max_features", default=100)
     parser.add_argument("-d", "--dataset_root", default=None,
                         help="If specified, use another user's data root")
@@ -265,7 +272,8 @@ if __name__ == "__main__":
         target_stat=args.target_stat,
         max_features=args.max_features,
         dataset_root=args.dataset_root,
-        base_nifti=args.base_nifti
+        base_nifti=args.base_nifti,
+        image_threshold=args.image_threshold
     )
 
     main(args.model_path, args.out_dir, args.prefix, **anal_args)

@@ -70,7 +70,7 @@ function plot_image(image, id) {
 	},
 	grid: {
 	    borderWidth: 0,
-	    minBorderMargin: 5
+	    minBorderMargin: 2
 	}
     };
 
@@ -108,7 +108,11 @@ function add_feature_to_modal(id, obj, wd, div) {
     div.appendChild(container);
     container.className = "feature_container";
     var fdiv = document.createElement("div");
-    fdiv.className = "feature_div_big";
+    if (obj.image_type == "mri") {
+	fdiv.className = "feature_div_big mri";
+    } else {
+	fdiv.className = "feature_div_big";
+    }
     fdiv.id = id + "_feature";
     container.appendChild(fdiv);
 
@@ -566,11 +570,10 @@ function makeFeaturesTab(id, title, active) {
 	ul.appendChild(tab);
 	var model_div = document.createElement("div");
 	tab_content.appendChild(model_div);
-	model_div.className = "features_div";
 	if (active) {
-	    model_div.className = "tab-pane fade in active";
+	    model_div.className = "tab-pane fade in active features_div";
 	} else {
-	    model_div.className = "tab-pane fade";
+	    model_div.className = "tab-pane fade features_div";
 	}
 	model_div.role = "tabpanel";
 	model_div.id = id;
@@ -592,7 +595,11 @@ function updateAnalysis(json, wd) {
     function addFeature(id, obj, model, feature, div) {
 	var fdiv = document.createElement("div");
 	div.appendChild(fdiv);
-	fdiv.className = "feature_div";
+	if (obj.image_type == "mri") {
+	    fdiv.className = "feature_div mri";
+	} else {
+	    fdiv.className = "feature_div";
+	}
 	fdiv.id = model + "_feature_" + id.toString();
 	fdiv.href = "#";
 	fdiv.setAttribute("data-toggle", "modal");
@@ -612,7 +619,7 @@ function updateAnalysis(json, wd) {
 
     var first = true;
     for (var model in json) {
-	var model_div = makeFeaturesTab(model, model, first);
+	var model_div = makeFeaturesTab(model, model.toUpperCase(), first);
 	first = false;
 	console.log(model_div.id)
 
@@ -635,7 +642,7 @@ function updateAnalysis(json, wd) {
 	for (var match_model in match_models) {
 	    console.log(match_models[match_model]);
 	    var match_div = makeFeaturesTab(model + "_" + match_models[match_model],
-					    model + "+" + match_models[match_model], false);
+					    (model + "+" + match_models[match_model]).toUpperCase(), false);
 
 	    for (var feature in json[model].features) {
 		if (match_models[match_model]

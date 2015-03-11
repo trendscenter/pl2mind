@@ -240,13 +240,14 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
     ms = ModelStructure(model, dataset)
     models = ms.get_ordered_list()
 
-    logger.info("Getting activations for model of type %s and model %s"
-                % (type(model), dataset.dataset_name))
+    logger.info("Getting activations for model of type %s"
+                % (type(model)))
     data = ms.dataset.get_design_matrix()
     X = sharedX(data)
 
     feature_dict = {}
     for i, model in enumerate(models):
+        logger.info("Passing data through %s" % model)
         F, stats = get_features(model)
         for model_below in models[:i]:
             F = downward_message(F, model_below)

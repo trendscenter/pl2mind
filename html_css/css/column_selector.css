@@ -101,17 +101,16 @@
     width: auto;
     border: 2px solid #a1a1a1;
     border-radius: 5px;
-    padding: 0px 10px;
+    padding: 10px 10px;
     display: inline-block;
-    margin: 10px 10px 10px 10px;
+    margin: 5px 5px 5px 5px;
 }
 
 .features_div {
+    background-color: #444444;
     width: auto;
     border: 2px solid #a1a1a1;
     border-radius: 5px;
-    padding: 10px 10px 0px 0px;
-    margin: 50px 50px 50px 50px;
 }
 
 .match_feature_div {
@@ -119,17 +118,23 @@
     border-radius: 5px;
     margin: 5px 5px 5px 5px;
     width: auto;
-    height: 100px;
+    height: auto;
     display: inline-block;
+    background-color: #eeeeee;
 }
 
 .feature_div {
+    background-color: #fafafa;
     border: 1px solid #a1a1a1;
     border-radius: 5px;
     margin: 5px 5px 5px 5px;
-    width: 80px;
-    height: 80px;
+    width: 75px;
+    height: 75px;
     display: inline-block;
+}
+
+.feature_div.mri {
+    width: 200px;
 }
 
 .feature_div_big {
@@ -140,6 +145,10 @@
     width: 250px;
     height: 250px;
     display: inline-block;
+}
+
+.feature_div_big.mri {
+    width: 700px;
 }
 
 .table_div {
@@ -234,15 +243,13 @@
     visibility: hidden;
 }
 
-#myTab {
-    margin: 10px 20px 10px 10px;
+#tabs {
     height: auto;
     width: auto;
 }
 
-#tabs {
-    height: auto;
-    width: auto;
+.nav-tabs {
+    margin-left: 10px;
 }
 
 .tab-content {
@@ -251,7 +258,7 @@
     padding: 5px 10px;
     border-radius: 5px;
     margin: 0px 10px 10px 10px;
-    background-color: white;
+    background-color: #eeeeee;
     height: auto;
     width: auto;
 }

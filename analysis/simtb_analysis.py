@@ -161,6 +161,7 @@ def main(model, out_path=None, prefix=None, **anal_args):
         for k, f in features.f.iteritems():
             fd = dict(
                 image=path.join("%s_images" % name, "%d.png" % f.id),
+                image_type="simtb",
                 index=f.id,
                 hists=f.hists,
                 match_indices=f.match_indices
@@ -172,8 +173,6 @@ def main(model, out_path=None, prefix=None, **anal_args):
         anal_dict[name] = dict(
             name=name,
             image_dir=image_dir,
-            #spatial_maps=features.spatial_maps.tolist(),
-            #activations=features.activations.tolist(),
             features=fds
         )
 
