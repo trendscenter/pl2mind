@@ -522,7 +522,10 @@ function makeLayout(body, json, wd) {
 
     analysis.id = "analysis";
     analysis.className = "tab-pane fade";
-    analysis.innerHTML = "None processed";
+    var anal_text = document.createElement("div");
+    anal_text.id = "anal_text";
+    anal_text.innerHTML = "None processed";
+    analysis.appendChild(anal_text);
     analysis.role = "tabpanel";
     anal_ul = document.createElement("ul");
     anal_ul.role = "tablist";
@@ -616,6 +619,9 @@ function updateAnalysis(json, wd) {
 	//fdiv.innerHTML = json[model].features[feature].index;
 	return fdiv;
     }
+
+    var anal_text = document.getElementById("anal_text");
+    anal_text.innerHTML = "";
 
     var first = true;
     for (var model in json) {

@@ -218,21 +218,19 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
         novels = np.load(serial.preprocess(p + "novels.npy"))
         return targets, novels
 
-    def get_mask(self, dataset_name):
+    def get_mask(self):
         """
         Get mask for dataset.
 
         Parameters
         ----------
-        dataset_name: str
-            Name of dataset.
 
         Returns
         -------
         mask: array-like
             4D array of 1 and 0 values.
         """
-        p = path.join(self.dataset_root, dataset_name + "/")
+        p = path.join(self.dataset_root, self.dataset_name + "/")
         mask_path = serial.preprocess(p + "mask.npy")
         mask = np.load(mask_path)
         if not np.all(np.bitwise_or(mask == 0, mask == 1)):
@@ -458,7 +456,7 @@ class MRI_Standard(MRI):
         logger.info("Dataset shape is %r" % (topo_view.shape,))
 
         if apply_mask:
-            mask = self.get_mask(dataset_name)
+            mask = self.get_mask()
         else:
             mask = None
 
@@ -572,7 +570,7 @@ class MRI_Transposed(MRI):
             y = y[:y.shape[0] // 2 * 2]
 
         if apply_mask:
-            mask = self.get_mask(dataset_name)
+            mask = self.get_mask()
         else:
             mask = None
 
