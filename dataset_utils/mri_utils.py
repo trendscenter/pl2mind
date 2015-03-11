@@ -105,7 +105,7 @@ def read_niftis(file_lists):
         The data and corresponding labels
     """
 
-    data0 = load_image(file_lists[0][0]).get_data()
+    data0 = load_image(file_lists[0]).get_data()
     if len(data0.shape) == 3:
         x, y, z = data0.shape
         t = 1
