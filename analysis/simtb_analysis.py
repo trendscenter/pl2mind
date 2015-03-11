@@ -6,9 +6,11 @@ import matplotlib
 matplotlib.use("Agg")
 
 import argparse
+import itertools
 import json
 import logging
 from matplotlib import pyplot as plt
+import multiprocessing as mp
 from munkres import Munkres
 import networkx as nx
 import numpy as np
@@ -38,23 +40,34 @@ def save_simtb_montage(dataset, features, out_file, feature_dict,
                          target_stat=target_stat,
                          target_value=target_value)
 
+def save_helper(args):
+    simtb_viewer.make_spatial_map_image(*args)
+
 def save_simtb_spatial_maps(dataset, features, out_path):
     """
     Saves a series of simtb images.
     """
-    logger.info("Saving simtb images")
+    logger.info("Saving simtb images for model %s" % features.name)
     spatial_maps = features.spatial_maps
-    spatial_maps = dataset.get_weights_view(spatial_maps)
-    for i, feature in features.f.iteritems():
-        spatial_map = spatial_maps[i]
-        simtb_viewer.make_spatial_map_image(
-            spatial_map, out_file=path.join(out_path, "%d.png" % feature.id))
+    if len(spatial_maps.shape) != 4:
+        spatial_maps = dataset.get_weights_view(spatial_maps)
+
+    features = [v for v in features.f.values()]
+    out_files = [path.join(out_path, "%d.png" % feature.id)
+                 for feature in features]
+
+    p = mp.Pool(len(features))
+    args_iter = itertools.izip(spatial_maps, out_files)
+    p.map(save_helper, args_iter)
 
 def match_to_gt(p, gt, method="munkres", discard_misses=False):
     """
     Match parameter to ground truth features.
     """
     logger.info("Matching to ground truth")
+    assert p.shape[1] == gt.shape[1], (
+        "Shapes do not match (%s vs %s)" % (p.shape, gt.shape)
+    )
     match_size = min(p.shape[0], gt.shape[0])
     corrs = np.corrcoef(p, gt)[match_size:,:match_size]
     corrs[np.isnan(corrs)] = 0
@@ -88,7 +101,7 @@ def analyze_ground_truth(feature_dict, ground_truth_dict, dataset):
     gt_topo_view = ground_truth_dict[0]["SM"].reshape(
         (ground_truth_dict[0]["SM"].shape[0], ) +
         dataset.view_converter.shape).transpose(0, 2, 1, 3)
-    gt_spatial_maps = dataset.get_design_matrix(gt_topo_view)
+    gt_spatial_maps =  dataset.get_design_matrix(gt_topo_view)
     gt_activations = ground_truth_dict[0]["TC"]
 
     for name, features in feature_dict.iteritems():
@@ -97,7 +110,8 @@ def analyze_ground_truth(feature_dict, ground_truth_dict, dataset):
         for fi, gi in indices:
             features.f[fi].match_indices["ground_truth"] = gi
 
-    feature_dict["ground_truth"] = fe.Features(gt_spatial_maps, gt_activations)
+    feature_dict["ground_truth"] = fe.Features(gt_topo_view, gt_activations,
+                                               name="ground truth")
 
 def main(model, out_path=None, prefix=None, **anal_args):
     """
@@ -150,6 +164,11 @@ def main(model, out_path=None, prefix=None, **anal_args):
     analyze_ground_truth(feature_dict, sim_dict, dataset)
 
     anal_dict = dict()
+
+    mask = dataset.get_mask()
+    feature_dict["mask"] = fe.Features(np.array([mask]), np.array([[0]]),
+                                       name="mask")
+
     for name, features in feature_dict.iteritems():
         image_dir = path.join(out_path, "%s_images" % name)
         if not path.isdir(image_dir):
