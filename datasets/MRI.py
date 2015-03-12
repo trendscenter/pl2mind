@@ -113,28 +113,36 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             X -= X.mean()
 
         if self.demean:
+            logger.info("Demeaning data along axis %s" % self.demean)
             if isinstance(self.demean, tuple):
                 self.demean = self.demean[0]
             assert isinstance(self.demean, int), self.demean
             if self.demean == 1:
-                X -= X.mean(axis = 0)
+                X -= X.mean(axis=0)
             elif self.demean == 2:
-                X = (X.T - X.mean(1)).T
+                X = (X.T - X.mean(axis=1)).T
             else:
-                raise NotImplementedError
+                raise NotImplementedError("Axis %s not supported. Must be"
+                                          "0 (False), 1, 2, or False."
+                                          % self.demean)
 
         if self.variance_normalize:
+            logger.info("Variance normalizing data along axis %s"
+                        % self.variance_normalize)
             if isinstance(self.variance_normalize, tuple):
                 self.variance_normalize = self.variance_normalize[0]
             assert isinstance(self.variance_normalize, int)
             if self.variance_normalize == 1:
-                X /= X.std(axis = 0)
+                X /= X.std(axis=0)
             elif self.variance_normalize == 2:
-                X = (X.T / X.std(axis = 1)).T
+                X = (X.T / X.std(axis=1)).T
             else:
-                raise NotImplementedError
+                raise NotImplementedError("Axis %s not supported. Must be"
+                                          "0 (False), 1, 2, or False."
+                                          % self.demean)
 
         if self.unit_normalize:
+            logger.info("Unit-normalizing data")
             X -= X.min()
             X /= X.max()
             X = (X - .5) * 2
@@ -142,6 +150,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             assert np.amin(X) == -1, np.amin(X)
 
         if self.shuffle:
+            logger.info("Shuffling data")
             self.shuffle_rng = make_np_rng(None, [1 ,2 ,3],
                                            which_method="shuffle")
             for i in xrange(m):

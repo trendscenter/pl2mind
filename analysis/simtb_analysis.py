@@ -100,8 +100,6 @@ def analyze_ground_truth(feature_dict, ground_truth_dict, dataset):
     """
     Compare models to ground truth.
     """
-    print ground_truth_dict[0]["SM"].shape
-    print dataset.view_converter.shape
     gt_topo_view = ground_truth_dict[0]["SM"].reshape(
         (ground_truth_dict[0]["SM"].shape[0], ) +
         dataset.view_converter.shape).transpose(0, 2, 1, 3)
@@ -174,6 +172,22 @@ def main(model, out_path=None, prefix=None, **anal_args):
     mask = dataset.get_mask()
     feature_dict["mask"] = fe.Features(np.array([mask]), np.array([[0]]),
                                        name="mask")
+
+    if isinstance(dataset, MRI.MRI_Transposed):
+        samples = dataset.X[:, :10].T
+    else:
+        samples = dataset.X[:10]
+
+    feature_dict["samples"] = fe.Features(samples, np.array([[0] * 10]).T,
+                                          name="samples")
+
+    if isinstance(dataset, MRI.MRI_Transposed):
+        mean_image = dataset.X.mean(axis=1).T
+    else:
+        mean_image = dataset.X.mean(axis=0)
+
+    feature_dict["mean_image"] = fe.Features(np.array([mean_image]), np.array([[0]]).T,
+                                             name="mean image")
 
     for name, features in feature_dict.iteritems():
         image_dir = path.join(out_path, "%s_images" % name)

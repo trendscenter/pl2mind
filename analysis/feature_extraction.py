@@ -155,7 +155,7 @@ class Features(object):
         for stat, value in stats.iteritems():
             self.load_stats(stat, value.eval())
 
-        self.clean()
+        #self.clean()
 
     def __getitem__(self, key):
         return self.f[key]
@@ -169,11 +169,11 @@ class Features(object):
 
     def clean(self):
         if (self.spatial_maps > self.spatial_maps.mean()
-            + 5 * self.spatial_maps.std()).sum() > 1:
+            + 100 * self.spatial_maps.std()).sum() > 1:
             logger.warn("Founds some spurious voxels. Don't know why they "
                         "exist, but setting to 0.")
             self.spatial_maps[self.spatial_maps > self.spatial_maps.mean()
-                              + 5 * self.spatial_maps.std()] = 0
+                              + 100 * self.spatial_maps.std()] = 0
 
     def set_histograms(self, bins=100, tolist=False):
         for k, f in self.f.iteritems():

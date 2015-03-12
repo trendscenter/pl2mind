@@ -17,13 +17,13 @@ import numpy as np
 logger = logging.getLogger("pl2mind")
 
 def make_spatial_map_image(spatial_map, out_file):
-    fig = plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=(5, 5))
 
     assert spatial_map.shape[2] == 1
     spatial_map = spatial_map.reshape(*spatial_map.shape[:2])
-    imax = np.max(np.absolute(spatial_map)); imin = -imax
+    imax = np.max(np.absolute(spatial_map))
     plt.axis("off")
-    imshow_args = {'vmax': imax, 'vmin': imin}
+    imshow_args = {'vmax': imax, 'vmin': -imax}
     plt.imshow(spatial_map, **imshow_args)
     if out_file is not None:
         logger.info("Saving montage to %s" % out_file)
