@@ -3,6 +3,13 @@ Module to perform analysis on MRI models.
 Note: fMRI support to be added in the future.
 """
 
+__author__ = "Devon Hjelm"
+__copyright__ = "Copyright 2014, Mind Research Network"
+__credits__ = ["Devon Hjelm"]
+__licence__ = "3-clause BSD"
+__email__ = "dhjelm@mrn.org"
+__maintainer__ = "Devon Hjelm"
+
 import argparse
 import json
 import logging
@@ -37,8 +44,6 @@ from pylearn2.utils import sharedX
 
 import sys
 import theano.tensor as T
-
-import warnings
 
 
 logger = logger.setup_custom_logger("pl2mind", logging.ERROR)
@@ -155,6 +160,23 @@ def save_nii_montage(nifti, nifti_file, out_file,
                          target_stat=target_stat,
                          target_value=target_value)
 
+def compare_models(feature_dict):
+    """
+    Inter-model comparison.
+    """
+
+    feature_list = [(name, features)
+        for name, features in feature_dict.iteritems()]
+
+    for i in range(len(feature_list)):
+        for j in range(i + 1, len(feature_list)):
+            logger.info("Analyzing %s compared to %s" % (feature_list[i][0],
+                                                         feature_list[j][0]))
+            indices = fe.match_parameters(feature_list[i][1].spatial_maps,
+                                          feature_list[j][1].spatial_maps)
+            for pi, qi in indices:
+                feature_list[i][1].f[pi].match_indices[feature_list[j][0]] = qi
+
 def main(model, out_path=None, prefix=None, **anal_args):
     """
     Main function of module.
@@ -202,6 +224,8 @@ def main(model, out_path=None, prefix=None, **anal_args):
         dataset = dataset.raw
 
     anal_dict = dict()
+
+    compare_models(feature_dict)
     for name, features in feature_dict.iteritems():
         image_dir = path.join(out_path, "%s_images" % name)
         if not path.isdir(image_dir):
@@ -215,7 +239,8 @@ def main(model, out_path=None, prefix=None, **anal_args):
                 image=path.join("%s_images" % name, "%d.png" % f.id),
                 image_type="mri",
                 index=f.id,
-                hists=f.hists
+                hists=f.hists,
+                match_indices=f.match_indices
             )
             fd.update(**f.stats)
 
@@ -234,7 +259,7 @@ def main(model, out_path=None, prefix=None, **anal_args):
     with open(json_file, "w") as f:
         json.dump(anal_dict, f)
 
-    logger.info("Done.")
+    logger.info("Analysis done")
 
 def make_argument_parser():
     """

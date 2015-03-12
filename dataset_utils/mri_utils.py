@@ -18,6 +18,10 @@ import numpy as np
 import os
 from os import path
 import pickle
+
+from pl2mind import logger
+from pylearn2.utils import serial
+
 from random import shuffle
 import re
 from scipy import io
@@ -25,12 +29,9 @@ from scipy.stats import kurtosis
 from scipy.stats import skew
 import sys
 from sys import stdout
-import warnings
-from pylearn2.utils import serial
 
 
-logging.basicConfig(format="[%(levelname)s]:%(message)s")
-logger = logging.getLogger(__name__)
+logger = logger.setup_custom_logger("pl2mind", logging.ERROR)
 
 def natural_sort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()

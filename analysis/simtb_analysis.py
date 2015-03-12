@@ -2,6 +2,13 @@
 Module for simtb analysis
 """
 
+__author__ = "Devon Hjelm"
+__copyright__ = "Copyright 2014, Mind Research Network"
+__credits__ = ["Devon Hjelm"]
+__licence__ = "3-clause BSD"
+__email__ = "dhjelm@mrn.org"
+__maintainer__ = "Devon Hjelm"
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -11,7 +18,6 @@ import json
 import logging
 from matplotlib import pyplot as plt
 import multiprocessing as mp
-from munkres import Munkres
 import networkx as nx
 import numpy as np
 import os
@@ -61,41 +67,6 @@ def save_simtb_spatial_maps(dataset, features, out_path):
     args_iter = itertools.izip(spatial_maps, out_files)
     p.map(save_helper, args_iter)
 
-def match_to_gt(p, gt, method="munkres", discard_misses=False):
-    """
-    Match parameter to ground truth features.
-    """
-    logger.info("Matching to ground truth")
-    assert p.shape[1] == gt.shape[1], (
-        "Shapes do not match (%s vs %s)" % (p.shape, gt.shape)
-    )
-
-    match_size = min(p.shape[0], gt.shape[0])
-    corrs = np.corrcoef(p, gt)[match_size:, :match_size]
-    corrs[np.isnan(corrs)] = 0
-
-    if method == "munkres":
-        m = Munkres()
-        cl = 1 - np.abs(corrs)
-        if (cl.shape[0] > cl.shape[1]):
-            indices = m.compute(cl.T)
-        else:
-            indices = m.compute(cl)
-            indices = [(i[1], i[0]) for i in inds_r]
-
-    elif method == "greedy":
-        gt_idx = []
-        raise NotImplementedError()
-        for c in range(self.gt.nC):
-            idx = corrs[c, :].argmax()
-            gt_idx.append(idx)
-            corrs[:,idx] = 0
-
-    else:
-        raise NotImplementedError()
-
-    return indices
-
 def analyze_ground_truth(feature_dict, ground_truth_dict, dataset):
     """
     Compare models to ground truth.
@@ -110,7 +81,7 @@ def analyze_ground_truth(feature_dict, ground_truth_dict, dataset):
 
     for name, features in feature_dict.iteritems():
         logger.info("Analyzing %s compared to ground truth" % name)
-        indices = match_to_gt(features.spatial_maps, gt_spatial_maps)
+        indices = fe.match_parameters(features.spatial_maps, gt_spatial_maps)
         for fi, gi in indices:
             features.f[fi].match_indices["ground_truth"] = gi
 

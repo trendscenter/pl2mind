@@ -2,11 +2,19 @@
 Module for feature extraction.
 """
 
+__author__ = "Devon Hjelm"
+__copyright__ = "Copyright 2014, Mind Research Network"
+__credits__ = ["Devon Hjelm"]
+__licence__ = "3-clause BSD"
+__email__ = "dhjelm@mrn.org"
+__maintainer__ = "Devon Hjelm"
+
 import matplotlib
 matplotlib.use("Agg")
 
 import logging
 from matplotlib import pylab as plt
+from munkres import Munkres
 import numpy as np
 from os import path
 
@@ -189,6 +197,41 @@ class Features(object):
                 edges=act_edges.tolist() if tolist else act_edges
             )
 
+def match_parameters(p, q, method="munkres", discard_misses=False):
+    """
+    Match two sets of parameters.
+    TODO: finish greedy
+    """
+    logger.info("Matching with method %s" % method)
+    assert p.shape[1] == q.shape[1], (
+        "Shapes do not match (%s vs %s)" % (p.shape, q.shape)
+    )
+
+    match_size = min(p.shape[0], q.shape[0])
+    corrs = np.corrcoef(p, q)[match_size:, :match_size]
+    corrs[np.isnan(corrs)] = 0
+
+    if method == "munkres":
+        m = Munkres()
+        cl = 1 - np.abs(corrs)
+        if (cl.shape[0] > cl.shape[1]):
+            indices = m.compute(cl.T)
+        else:
+            indices = m.compute(cl)
+            indices = [(i[1], i[0]) for i in indices]
+
+    elif method == "greedy":
+        q_idx = []
+        raise NotImplementedError("Greedy not supported yet.")
+        for c in range(q.shape[0]):
+            idx = corrs[c, :].argmax()
+            q_idx.append(idx)
+            corrs[:,idx] = 0
+
+    else:
+        raise NotImplementedError("%s matching not supported" % method)
+
+    return indices
 
 def resolve_dataset(model, dataset_root=None, **kwargs):
     """
@@ -200,7 +243,7 @@ def resolve_dataset(model, dataset_root=None, **kwargs):
     logger.info("Resolving full dataset from training set.")
     dataset_yaml = model.dataset_yaml_src
     if "MRI_Standard" in dataset_yaml:
-        dataset_yaml = dataset_yaml.replace("train", "full")
+        dataset_yaml = dataset_yaml.replace("train,", "full,")
 
     if dataset_root is not None:
         logger.warn("Hacked transformer dataset dataset_root in. "

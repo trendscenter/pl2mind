@@ -3,6 +3,13 @@ This module is for handling MRI datasets (sMRI and fMRI).
 TODO: handle functional aspects for fMRI here.
 """
 
+__author__ = "Devon Hjelm"
+__copyright__ = "Copyright 2014, Mind Research Network"
+__credits__ = ["Devon Hjelm"]
+__licence__ = "3-clause BSD"
+__email__ = "dhjelm@mrn.org"
+__maintainer__ = "Devon Hjelm"
+
 import functools
 import logging
 
@@ -188,15 +195,15 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             raise IOError("MRI dataset directory %s not found."
                            % serial.preprocess(p))
 
-        if which_set == 'train':
-            data_path = p + 'train.npy'
-            label_path = p + 'train_labels.npy'
-        elif which_set == 'test':
-            data_path = p + 'test.npy'
-            label_path = p + 'test_labels.npy'
+        if which_set == "train":
+            data_path = p + "train.npy"
+            label_path = p + "train_labels.npy"
+        elif which_set == "test":
+            data_path = p + "test.npy"
+            label_path = p + "test_labels.npy"
         else:
             if which_set != "full":
-                raise ValueError("dataset \'%s\' not supported." % which_set)
+                raise ValueError("dataset \"%s\" not supported." % which_set)
             data_path = p + "full_unshuffled.npy"
             label_path = p + "full_labels_unshuffled.npy"
         nifti_path = p + "base.nii"
@@ -246,7 +253,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             raise ValueError("Mask has incorrect values.")
         return mask
 
-    def set_mri_topological_view(self, topo_view, axes=('b', 0, 1, 'c')):
+    def set_mri_topological_view(self, topo_view, axes=("b", 0, 1, "c")):
         """
         Set the topological view.
 
@@ -389,8 +396,8 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
 
         convert = []
         for sp, src in safe_zip(sub_spaces, sub_sources):
-            if (src == 'features'
-                and getattr(self, 'view_converter', None) is not None):
+            if (src == "features"
+                and getattr(self, "view_converter", None) is not None):
                 if self.distorter is None:
                     conv_fn = (lambda batch, self=self, space=sp:
                         self.view_converter.get_formatted_batch(batch, space))
@@ -406,7 +413,7 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
 
         # TODO: Refactor
         if mode is None:
-            if hasattr(self, '_iter_subset_class'):
+            if hasattr(self, "_iter_subset_class"):
                 mode = self._iter_subset_class
             else:
                 raise ValueError("iteration mode not provided and no default "
@@ -415,9 +422,9 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             mode = resolve_iterator_class(mode)
 
         if batch_size is None:
-            batch_size = getattr(self, '_iter_batch_size', None)
+            batch_size = getattr(self, "_iter_batch_size", None)
         if num_batches is None:
-            num_batches = getattr(self, '_iter_num_batches', None)
+            num_batches = getattr(self, "_iter_num_batches", None)
         if rng is None and mode.stochastic:
             rng = self.rng
         return FiniteDatasetIterator(self,
@@ -491,7 +498,7 @@ class MRI_Standard(MRI):
         super(MRI_Standard, self).__init__(X=X, y=y)
 
     def set_mri_topological_view(self, topo_view, mask=None,
-                                 axes=('b', 0, 1, 'c')):
+                                 axes=("b", 0, 1, "c")):
         """
         Set the topological view.
 
@@ -510,7 +517,7 @@ class MRI_Standard(MRI):
             The corresponding design matrix for the topological view.
         """
         assert not contains_nan(topo_view)
-        r, c, d = tuple(topo_view.shape[axes.index(i)] for i in (0, 1, 'c'))
+        r, c, d = tuple(topo_view.shape[axes.index(i)] for i in (0, 1, "c"))
 
         self.view_converter = MRIViewConverter((r, c, d), mask=mask, axes=axes)
         design_matrix = self.view_converter.topo_view_to_design_mat(topo_view)
@@ -588,7 +595,7 @@ class MRI_Transposed(MRI):
         super(MRI_Transposed, self).__init__(X=X, y=y)
 
     def set_mri_topological_view(self, topo_view, mask=None,
-                                 axes=('b', 0, 1, 'c')):
+                                 axes=("b", 0, 1, "c")):
         """
         Set the topological view.
 
@@ -607,7 +614,7 @@ class MRI_Transposed(MRI):
             The corresponding design matrix for the topological view.
         """
         assert not contains_nan(topo_view)
-        r, c, d = tuple(topo_view.shape[axes.index(i)] for i in (0, 1, 'c'))
+        r, c, d = tuple(topo_view.shape[axes.index(i)] for i in (0, 1, "c"))
 
         self.view_converter = MRIViewConverterTransposed(
             (r, c, d), mask=mask, axes=axes)
@@ -624,7 +631,7 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
     """
 
     def __init__(self, which_set, center=False, variance_normalize=False,
-                 shuffle=False, apply_mask=False, preprocessor=None, dataset_name='smri',
+                 shuffle=False, apply_mask=False, preprocessor=None, dataset_name="smri",
                  reprocess=False, save_dummy=False):
         """
         Parameters
@@ -652,31 +659,30 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
         if not path.isdir(serial.preprocess("${PYLEARN2_NI_PATH}")):
             raise ValueError("Did you set the PYLEARN_NI_PATH variable?")
 
-        if which_set not in ['train', 'test']:
-            if which_set == 'valid':
+        if which_set not in ["train", "test"]:
+            if which_set == "valid":
                 raise ValueError(
                     "Currently validation dataset is not supported with"
                     "sMRI.  This can be added in smri_nifti.py.")
             raise ValueError(
-                'Unrecognized which_set value "%s".' % (which_set,) +
-                '". Valid values are ["train","test"].')
+                "Unrecognized which_set value %s " % (which_set))
 
         self.__dict__.update(locals())
         del self.self
 
         p = "${PYLEARN2_NI_PATH}/%s/" % dataset_name
-        assert path.isdir(p), "No NI data directory called '%s'" %dataset_name
+        assert path.isdir(p), ("No NI data directory called %s" % dataset_name)
 
-        if which_set == 'train':
-            data_path = p + 'train.h5'
+        if which_set == "train":
+            data_path = p + "train.h5"
         else:
-            assert which_set == 'test'
-            data_path = p + 'test.h5'
+            assert which_set == "test"
+            data_path = p + "test.h5"
 
-        # Dummy file is for tests, don't want to resave over data we might actually be
+        # Dummy file is for tests, don"t want to resave over data we might actually be
         # using every time we run a test.
         if save_dummy:
-            data_path = "".join(data_path.split(".")[0] + '_dummy.h5')
+            data_path = "".join(data_path.split(".")[0] + "_dummy.h5")
 
         data_path = serial.preprocess(data_path)
 
@@ -694,14 +700,14 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
 
         # Make the h5 file if not present or if reprocess flag is set.
         if not os.path.isfile(data_path) or reprocess:
-            self.filters = tables.Filters(complib='blosc', complevel=5)
+            self.filters = tables.Filters(complib="blosc", complevel=5)
             self.make_data(which_set, serial.preprocess(p),
                            center=center,
                            variance_normalize=variance_normalize,
                            shuffle=shuffle, save_dummy=save_dummy)
 
         self.h5file = tables.openFile(data_path)
-        data = self.h5file.getNode('/', "Data")
+        data = self.h5file.getNode("/", "Data")
         view_converter = MRIViewConverter((rows, columns, depth))
 
         super(MRI_Big, self).__init__(X=data.X, y=data.y,
@@ -718,17 +724,17 @@ class MRI_Big(dense_design_matrix.DenseDesignMatrixPyTables):
 
         logger.info("Making h5 file for %s" % which_set)
 
-        if which_set == 'train':
-            source_path = serial.preprocess(p + 'train.npy')
-            data_path = serial.preprocess(p + 'train.h5')
-            label_path = serial.preprocess(p + 'train_labels.npy')
+        if which_set == "train":
+            source_path = serial.preprocess(p + "train.npy")
+            data_path = serial.preprocess(p + "train.h5")
+            label_path = serial.preprocess(p + "train_labels.npy")
         else:
-            assert which_set == 'test'
-            source_path = serial.preprocess(p + 'test.npy')
-            data_path = serial.preprocess(p + 'test.h5')
-            label_path = serial.preprocess(p + 'test_labels.npy')
+            assert which_set == "test"
+            source_path = serial.preprocess(p + "test.npy")
+            data_path = serial.preprocess(p + "test.h5")
+            label_path = serial.preprocess(p + "test_labels.npy")
 
-        data_path = "".join(data_path.split(".")[0] + '_dummy.h5')
+        data_path = "".join(data_path.split(".")[0] + "_dummy.h5")
 
         # Get the topological view and labels.
         topo_view = np.load(source_path)
@@ -861,7 +867,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
     Class for neuroimaging view converters. Takes account 3D.
     """
 
-    def __init__(self, shape, mask=None, axes=('b', 0, 1, 'c')):
+    def __init__(self, shape, mask=None, axes=("b", 0, 1, "c")):
         self.__dict__.update(locals())
         self.theano_mask = None
         if self.mask is not None:
@@ -883,7 +889,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
         expected_row_size = np.prod(self.shape)
         if self.mask is not None:
             mask_idx = np.where(self.mask.transpose([self.axes.index(ax) - 1
-                                                     for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
+                                                     for ax in ("c", 0, 1)]).flatten() == 1)[0].tolist()
             assert self.mask.shape == self.shape
             r, c, d = self.mask.shape
             m = design_matrix.shape[0]
@@ -892,7 +898,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
                 sample = topo_array_bc01[i].flatten()
                 sample[mask_idx] = design_matrix[i]
                 topo_array_bc01[i] = sample.reshape((d, r, c))
-            axis_order = [('b', 'c', 0, 1).index(axis) for axis in self.axes]
+            axis_order = [("b", "c", 0, 1).index(axis) for axis in self.axes]
             topo_array = topo_array_bc01.transpose(*axis_order)
         else:
             topo_array = super(MRIViewConverter, self).design_mat_to_topo_view(design_matrix)
@@ -909,7 +915,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
 
         # weights view is always for display
         rval = np.transpose(rval, tuple(self.axes.index(axis)
-                                        for axis in ('b', 0, 1, 'c')))
+                                        for axis in ("b", 0, 1, "c")))
 
         return rval
 
@@ -920,7 +926,7 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
             WRITEME
         """
 
-        for shape_elem, axis in safe_zip(self.shape, (0, 1, 'c')):
+        for shape_elem, axis in safe_zip(self.shape, (0, 1, "c")):
             if topo_array.shape[self.axes.index(axis)] != shape_elem:
                 raise ValueError(
                     "topo_array's %s axis has a different size "
@@ -935,15 +941,15 @@ class MRIViewConverter(dense_design_matrix.DefaultViewConverter):
             m = topo_array.shape[0]
             mask_idx = np.where(self.mask.transpose(
                 [self.axes.index(ax) - 1
-                 for ax in ('c', 0, 1)]).flatten() == 1)[0].tolist()
+                 for ax in ("c", 0, 1)]).flatten() == 1)[0].tolist()
             design_matrix = np.zeros((m, len(mask_idx)), dtype=topo_array.dtype)
             for i in range(m):
                 topo_array_c01 = topo_array[i].transpose([self.axes.index(ax) - 1
-                                                          for ax in ('c', 0, 1)])
+                                                          for ax in ("c", 0, 1)])
                 design_matrix[i] = topo_array_c01.flatten()[mask_idx]
         else:
             topo_array_bc01 = topo_array.transpose([self.axes.index(ax)
-                                                    for ax in ('b', 'c', 0, 1)])
+                                                    for ax in ("b", "c", 0, 1)])
             design_matrix = topo_array_bc01.reshape((topo_array.shape[0],
                                                      np.prod(topo_array.shape[1:])))
 

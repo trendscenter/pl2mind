@@ -633,7 +633,7 @@ function updateAnalysis(json, wd) {
 	for (var feature in json[model].features) {
 	    var f = json[model].features[feature];
 	    addFeature(feature, f, model, feature, model_div);
-	    var matched_features = {}
+	    var matched_features = {};
 	    for (var match_model
 		 in json[model].features[feature].match_indices) {
 		if ($.inArray(match_model, match_models) == -1) {

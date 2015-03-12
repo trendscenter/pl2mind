@@ -2,6 +2,13 @@
 Module for input handler.
 """
 
+__author__ = "Devon Hjelm"
+__copyright__ = "Copyright 2014, Mind Research Network"
+__credits__ = ["Devon Hjelm"]
+__licence__ = "3-clause BSD"
+__email__ = "dhjelm@mrn.org"
+__maintainer__ = "Devon Hjelm"
+
 import numpy as np
 from os import path
 from pl2mind.datasets import MRI

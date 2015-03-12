@@ -2,6 +2,13 @@
 Module for managing experiments.
 """
 
+__author__ = "Devon Hjelm"
+__copyright__ = "Copyright 2014, Mind Research Network"
+__credits__ = ["Devon Hjelm"]
+__licence__ = "3-clause BSD"
+__email__ = "dhjelm@mrn.org"
+__maintainer__ = "Devon Hjelm"
+
 import matplotlib
 matplotlib.use("Agg")
 
@@ -106,8 +113,6 @@ class LogHandler(object):
             "yaml": None,
             "results_of_interest": experiment.results_of_interest +\
                 ["cpu", "mem"],
-            "outputs": dict((o, "%s.pdf" % o)
-                for o in experiment.outputs),
             "stats": {
                 "status": "STARTING",
                 "pid": None,
