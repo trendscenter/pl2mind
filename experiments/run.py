@@ -5,10 +5,7 @@ Command-line module to run experiments
 import argparse
 import imp
 from pl2mind import experiments
-import warnings
 
-
-warnings.filterwarnings("ignore")
 
 def make_argument_parser():
     """

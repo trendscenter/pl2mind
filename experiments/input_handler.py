@@ -48,7 +48,9 @@ class MRIInputHandler(object):
         unit_normalize = hyperparams.get("unit_normalize", False)
         demean = hyperparams.get("demean", False)
         even_input = False # Fix this
-        assert not (variance_normalize and unit_normalize)
+        assert not ((variance_normalize == 1) and unit_normalize), (
+            "Cannot variance normalize and unit normalize in the same direction"
+        )
 
         data_path = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
 
@@ -58,9 +60,9 @@ class MRIInputHandler(object):
             return self.d[h]
         else:
             if data_class == "MRI_Transposed":
-                assert not variance_normalize
                 mri = MRI.MRI_Transposed(dataset_name=dataset_name,
                                          unit_normalize=unit_normalize,
+                                         variance_normalize=variance_normalize,
                                          demean=demean,
                                          even_input=even_input,
                                          apply_mask=True)

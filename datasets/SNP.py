@@ -1,9 +1,23 @@
+"""
+Module for SNP datasets.
+"""
+
+__author__ = "Devon Hjelm"
+__copyright__ = "Copyright 2014, Mind Research Network"
+__credits__ = ["Devon Hjelm"]
+__licence__ = "3-clause BSD"
+__email__ = "dhjelm@mrn.org"
+__maintainer__ = "Devon Hjelm"
+
 from copy import deepcopy
 import functools
 from glob import glob
 import logging
 import numpy as np
 from os import path
+
+from pl2mind import logger
+from pl2mind.research import randomize_snps
 
 from pylearn2.datasets import control
 from pylearn2.datasets import Dataset
@@ -23,11 +37,9 @@ from pylearn2.utils.rng import make_np_rng
 from theano import config
 from theano.compat.python2x import OrderedDict
 
-from pl2mind.research import randomize_snps
 
+logger = logging.getLogger("pl2mind")
 
-logging.basicConfig(format="[%(module)s:%(levelname)s]:%(message)s")
-logger = logging.getLogger(__name__)
 
 class MultimodalMLP(mlp.MLP):
     def __init__(self, dataset, layers):
@@ -43,7 +55,7 @@ class MultimodalMLP(mlp.MLP):
 
 class MultiChromosomeLayer(mlp.CompositeLayer):
     def __init__(self, num_layers, layer_to_copy, layer_dims=None):
-        layer_name = 'multi_chromosome_layer'
+        layer_name = "multi_chromosome_layer"
 
         layers = []
         inputs_to_layers = {}
