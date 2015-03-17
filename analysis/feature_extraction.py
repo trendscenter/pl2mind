@@ -25,8 +25,10 @@ from pl2mind.datasets.MRI import MRI_Transposed
 from pylearn2.blocks import Block
 from pylearn2.config import yaml_parse
 from pylearn2.datasets.transformer_dataset import TransformerDataset
+from pylearn2.models.dbm.layer import GaussianVisLayer
 from pylearn2.models.dbm import DBM
 from pylearn2.models.dbm.dbm import RBM
+from pylearn2.models.dbn import DBN
 from pylearn2.models.vae import VAE
 from pylearn2.utils import sharedX
 
@@ -63,6 +65,8 @@ class ModelStructure(object):
                         % type(self.dataset.transformer))
             self.transformers.append(self.dataset.transformer)
             self.dataset = self.dataset.raw
+        if isinstance(self.model, DBN):
+            self.transformers += self.model.rbms[:-1]
 
     def transposed(self):
         return isinstance(self.dataset, MRI_Transposed)
@@ -84,7 +88,6 @@ class ModelStructure(object):
             graph["T%d" % (len(self.transformers) - 1)] = (
                 self.transformers[-1], self.model
             )
-
         return graph
 
     def get_named_graph(self):
@@ -160,7 +163,9 @@ class Features(object):
         for i, j in enumerate(idx):
             self.f[i] = Feature(j)
 
+        self.stats = []
         for stat, value in stats.iteritems():
+            self.stats.append(stat)
             self.load_stats(stat, value.eval())
 
         #self.clean()
@@ -196,6 +201,43 @@ class Features(object):
                 bins=act_bins.tolist() if tolist else act_bins,
                 edges=act_edges.tolist() if tolist else act_edges
             )
+
+    def make_graph(self, stat, absolute_value=True):
+        assert stat in self.stats + ["spatial_maps", "activations"]
+        nodes = [
+            dict(
+                name="%d" % f.id
+            )
+            for f in self.f.values()
+        ]
+
+        if stat == "spatial_maps":
+            corrs = np.corrcoef(self.spatial_maps,
+                                self.spatial_maps)[len(self.f):, :len(self.f)]
+
+        elif stat == "activations":
+            corrs = np.corrcoef(self.spatial_maps,
+                                self.spatial_maps)[len(self.f):, :len(self.f)]
+        else:
+            raise NotImplementedError()
+        links = []
+        if absolute_value:
+            corrs = np.abs(corrs)
+        print corrs
+        for i in xrange(len(self.f)):
+            for j in xrange(i + 1, len(self.f)):
+                links.append(
+                    dict(
+                        source=i,
+                        target=j,
+                        value=corrs[i, j]
+                    )
+                )
+        return dict(
+            nodes=nodes,
+            links=links
+        )
+
 
 def match_parameters(p, q, method="munkres", discard_misses=False):
     """
@@ -243,7 +285,7 @@ def resolve_dataset(model, dataset_root=None, **kwargs):
     logger.info("Resolving full dataset from training set.")
     dataset_yaml = model.dataset_yaml_src
     if "MRI_Standard" in dataset_yaml:
-        dataset_yaml = dataset_yaml.replace("train,", "full,")
+        dataset_yaml = dataset_yaml.replace("\"train\"", "\"full\"")
 
     if dataset_root is not None:
         logger.warn("Hacked transformer dataset dataset_root in. "
@@ -251,12 +293,12 @@ def resolve_dataset(model, dataset_root=None, **kwargs):
                      "problems with the dataset, this may be the reason.")
         dataset_yaml = dataset_yaml.replace("dataset_name", "dataset_root: %s, "
                                             "dataset_name" % dataset_root)
-
+    print dataset_yaml
     dataset = yaml_parse.load(dataset_yaml)
     return dataset
 
 def extract_features(model, dataset_root=None, zscore=False, max_features=100,
-                     **kwargs):
+                     multiply_variance=False, **kwargs):
     """
     Extracts the features given a number of model types.
     Included are special methods for VAE and NICE.
@@ -292,20 +334,53 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
     for i, model in enumerate(models):
         logger.info("Passing data through %s" % model)
         F, stats = get_features(model)
+        #if isinstance(model, DBN):
+        #    F = downward_message(F, model)
         for model_below in models[:i]:
             F = downward_message(F, model_below)
         X = upward_message(X, model)
 
         if ms.transposed():
-            f = Features(X.T.eval(), F.eval(), transposed=True, **stats)
+            sms = X.T.eval()
+            acts = F.eval()
         else:
-            f = Features(F.eval(), X.T.eval(), **stats)
+            sms = F.eval()
+            acts = X.T.eval()
+
+        if dataset.variance_map is not None and multiply_variance:
+            logger.info("Multiplying by variance map")
+            axis = dataset.variance_map[0]
+            vm = dataset.variance_map[1]
+            if ms.transposed():
+                axis = (axis + 1) % 2
+            if axis == 0:
+                sms = sms * vm
+            elif axis == 1:
+                sms = (sms.T * vm).T
+            else:
+                raise ValueError("Axis %s for variance map not supported"
+                                 % axis)
+        f = Features(sms, acts, transposed=ms.transposed(), **stats)
 
         feature_dict[stats["name"]] = f
 
     return feature_dict
 
 def get_features(model, max_features=100):
+    """
+    Form the original features in the model representation.
+
+    Parameters
+    ----------
+    model: pylearn2 Model
+        The model.
+    max_features: int
+        The maximum number of features to process.
+
+    Returns
+    -------
+    features, stats
+    """
 
     def make_vec(i, V):
         vec, updates = theano.scan(
@@ -369,10 +444,21 @@ def get_features(model, max_features=100):
 
     elif isinstance(model, RBM):
         features = model.hidden_layer.transformer.get_params()[0].T
+        #if isinstance(model.visible_layer, GaussianVisLayer):
+        #    X = T.eye(features.shape[0], model.visible_layer.nvis)
+        #    X -= model.visible_layer.mu
+        #    features = X.T.dot(features)
+
         stats = dict(name="rbm")
 
+    elif isinstance(model, DBN):
+        features, _ = get_features(model.top_rbm,
+                                   max_features=max_features)
+        stats = dict(name="dbn")
+
     else:
-        raise NotImplementedError()
+        raise NotImplementedError("No feature extraction for mode %s"
+                                  % type(model))
 
     return (features, stats)
 
@@ -392,6 +478,12 @@ def downward_message(Y, model):
     elif isinstance(model, RBM):
         hidden_layer = model.hidden_layer
         x = hidden_layer.downward_message(Y)
+
+    elif isinstance(model, DBN):
+        print model.rbms[0].visible_layer.nvis
+        X = sharedX(np.identity(model.rbms[0].visible_layer.nvis))
+        X = model.feed_forward(X)
+        x = X.dot(Y).T
 
     else:
         raise NotImplementedError()
@@ -426,6 +518,9 @@ def upward_message(X, model):
     elif isinstance(model, RBM):
         y = model(X)
 
+    elif isinstance(model, DBN):
+        y = model.top_rbm(X)
+
     elif isinstance(model, Block):
         y = model(X)
 
@@ -456,15 +551,17 @@ def save_nice_spectrum(model, out_dir):
     plt.plot(spectrum)
     f.savefig(path.join(out_dir, "nice_spectrum.pdf"))
 
-def get_convolved_activations(model, x_size=20, x_stride=20,
+def get_convolved_activations(model, dataset_root=None,
+                              x_size=20, x_stride=20,
                               y_size=20, y_stride=20,
                               z_size=20, z_stride=20):
     """
     Get convolved activations for model.
     """
 
-    dataset = resolve_dataset(model)
+    dataset = resolve_dataset(model, dataset_root=dataset_root)
     X = sharedX(dataset.get_topological_view(dataset.X))
+    assert False, X.shape.eval()
 
     def local_filter(i, sample):
         num_x = sample.shape[0] // x_stride
