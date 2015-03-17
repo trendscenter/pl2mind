@@ -561,7 +561,6 @@ def get_convolved_activations(model, dataset_root=None,
 
     dataset = resolve_dataset(model, dataset_root=dataset_root)
     X = sharedX(dataset.get_topological_view(dataset.X))
-    assert False, X.shape.eval()
 
     def local_filter(i, sample):
         num_x = sample.shape[0] // x_stride
