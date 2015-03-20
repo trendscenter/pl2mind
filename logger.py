@@ -4,10 +4,12 @@ Module for general logger.
 
 import logging
 
-logger = None
+loggers = {}
 
 def setup_custom_logger(name, level):
-    global logger
+    global loggers
+
+    logger = loggers.get(name, None)
     if logger is not None:
         logger.setLevel(level)
         return logger
@@ -20,4 +22,5 @@ def setup_custom_logger(name, level):
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.addHandler(handler)
+    loggers[name] = logger
     return logger
