@@ -13,6 +13,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import argparse
+import copy
 import itertools
 import json
 import logging
@@ -145,11 +146,11 @@ def main(model, out_path=None, prefix=None, **anal_args):
                                        name="mask")
 
     if isinstance(dataset, MRI.MRI_Transposed):
-        samples = dataset.X[:, :10].T
+        samples = dataset.X[:, :20].T
     else:
-        samples = dataset.X[:10]
+        samples = dataset.X[:20]
 
-    feature_dict["samples"] = fe.Features(samples, np.array([[0] * 10]).T,
+    feature_dict["samples"] = fe.Features(samples, np.array([[0] * 20]).T,
                                           name="samples")
 
     if isinstance(dataset, MRI.MRI_Transposed):
@@ -157,8 +158,16 @@ def main(model, out_path=None, prefix=None, **anal_args):
     else:
         mean_image = dataset.X.mean(axis=0)
 
-    feature_dict["mean_image"] = fe.Features(np.array([mean_image]), np.array([[0]]).T,
+    feature_dict["mean_image"] = fe.Features(np.array([mean_image]),
+                                             np.array([[0]]).T,
                                              name="mean image")
+
+    if dataset.variance_map is not None:
+        variance_map = dataset.variance_map[1]
+
+    feature_dict["variance_map"] = fe.Features(np.array([variance_map]),
+                                               np.array([[0]]).T,
+                                               name="variance map")
 
     for name, features in feature_dict.iteritems():
         image_dir = path.join(out_path, "%s_images" % name)
@@ -211,6 +220,7 @@ def make_argument_parser():
     parser.add_argument("-z", "--zscore", action="store_true")
     parser.add_argument("-t", "--target_stat", default=None)
     parser.add_argument("-m", "--max_features", default=100)
+    parser.add_argument("--multiply_variance", action="store_true")
     parser.add_argument("-d", "--dataset_root", default=None,
                         help="If specified, use another user's data root")
     return parser
@@ -221,11 +231,10 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    anal_args = dict(
-        zscore=args.zscore,
-        target_stat=args.target_stat,
-        max_features=args.max_features,
-        dataset_root=args.dataset_root,
-    )
+    anal_args = copy.deepcopy(vars(args))
+    anal_args.pop("verbose")
+    anal_args.pop("out_dir")
+    anal_args.pop("prefix")
+    anal_args.pop("model_path")
 
     main(args.model_path, args.out_dir, args.prefix, **anal_args)

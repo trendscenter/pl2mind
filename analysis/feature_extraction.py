@@ -12,6 +12,7 @@ __maintainer__ = "Devon Hjelm"
 import matplotlib
 matplotlib.use("Agg")
 
+import copy
 import logging
 from matplotlib import pylab as plt
 from munkres import Munkres
@@ -21,6 +22,8 @@ from os import path
 from pl2mind.datasets.MRI import MRI
 from pl2mind.datasets.MRI import MRI_Standard
 from pl2mind.datasets.MRI import MRI_Transposed
+
+import pprint
 
 from pylearn2.blocks import Block
 from pylearn2.config import yaml_parse
@@ -163,17 +166,27 @@ class Features(object):
         for i, j in enumerate(idx):
             self.f[i] = Feature(j)
 
-        self.stats = []
+        self.stat_names = []
         for stat, value in stats.iteritems():
-            self.stats.append(stat)
-            self.load_stats(stat, value.eval())
+            self.stat_names.append(stat)
+            self.load_feature_stats(stat, value.eval())
 
-        #self.clean()
+        self.stats = {}
+        self.load_stats()
+        self.clean()
 
     def __getitem__(self, key):
         return self.f[key]
 
-    def load_stats(self, stat_name, value):
+    def load_stats(self):
+        self.stats.update(**dict(
+            sm_means=np.sort(np.abs(self.spatial_maps).mean(axis=1) /
+                             np.abs(self.spatial_maps).mean()).tolist(),
+            sm_maxes=np.sort(np.abs(self.spatial_maps).max(axis=1) /
+                             np.abs(self.spatial_maps).max()).tolist()
+        ))
+
+    def load_feature_stats(self, stat_name, value):
         for k in self.f.keys():
             self.f[k].stats[stat_name] = value[k]
 
@@ -181,12 +194,19 @@ class Features(object):
         return self.features
 
     def clean(self):
-        if (self.spatial_maps > self.spatial_maps.mean()
-            + 100 * self.spatial_maps.std()).sum() > 1:
-            logger.warn("Founds some spurious voxels. Don't know why they "
-                        "exist, but setting to 0.")
-            self.spatial_maps[self.spatial_maps > self.spatial_maps.mean()
-                              + 100 * self.spatial_maps.std()] = 0
+        remove_idx = []
+        for f in self.f.keys():
+            if (np.abs(self.spatial_maps[f]).mean()
+                / np.abs(self.spatial_maps).mean() < 0.2):
+                remove_idx.append(f)
+        logger.info("Removing %d features" % len(remove_idx))
+        keep_idx = [i for i in range(len(self.f)) if i not in remove_idx]
+        new_f = {}
+        self.spatial_maps = self.spatial_maps[keep_idx]
+        self.activations = self.activations[keep_idx]
+        for i, j in enumerate(keep_idx):
+            new_f[i] = self.f[j]
+        self.f = new_f
 
     def set_histograms(self, bins=100, tolist=False):
         for k, f in self.f.iteritems():
@@ -203,7 +223,7 @@ class Features(object):
             )
 
     def make_graph(self, stat, absolute_value=True):
-        assert stat in self.stats + ["spatial_maps", "activations"]
+        assert stat in self.stat_names + ["spatial_maps", "activations"]
         nodes = [
             dict(
                 name="%d" % f.id
@@ -223,7 +243,6 @@ class Features(object):
         links = []
         if absolute_value:
             corrs = np.abs(corrs)
-        print corrs
         for i in xrange(len(self.f)):
             for j in xrange(i + 1, len(self.f)):
                 links.append(
@@ -293,7 +312,7 @@ def resolve_dataset(model, dataset_root=None, **kwargs):
                      "problems with the dataset, this may be the reason.")
         dataset_yaml = dataset_yaml.replace("dataset_name", "dataset_root: %s, "
                                             "dataset_name" % dataset_root)
-    print dataset_yaml
+    logger.info("Final yaml is: \n%s" % pprint.pformat(dataset_yaml))
     dataset = yaml_parse.load(dataset_yaml)
     return dataset
 
@@ -480,7 +499,6 @@ def downward_message(Y, model):
         x = hidden_layer.downward_message(Y)
 
     elif isinstance(model, DBN):
-        print model.rbms[0].visible_layer.nvis
         X = sharedX(np.identity(model.rbms[0].visible_layer.nvis))
         X = model.feed_forward(X)
         x = X.dot(Y).T
@@ -559,6 +577,9 @@ def get_convolved_activations(model, dataset_root=None,
     Get convolved activations for model.
     """
 
+    assert isinstance(model, RBM)
+    #model.call_method = "MUL"
+
     dataset = resolve_dataset(model, dataset_root=dataset_root)
     X = sharedX(dataset.get_topological_view(dataset.X))
 
@@ -590,8 +611,7 @@ def get_convolved_activations(model, dataset_root=None,
         data = dataset.view_converter.tv_to_dm_theano(topo)
         return data
 
-    subjects, updates = theano.scan(conv_data,
-                                    sequences=[X])
+    subjects, updates = theano.scan(conv_data, sequences=[X])
 
     def get_activations(x):
         y = upward_message(x, model)
