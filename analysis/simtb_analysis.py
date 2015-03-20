@@ -164,10 +164,9 @@ def main(model, out_path=None, prefix=None, **anal_args):
 
     if dataset.variance_map is not None:
         variance_map = dataset.variance_map[1]
-
-    feature_dict["variance_map"] = fe.Features(np.array([variance_map]),
-                                               np.array([[0]]).T,
-                                               name="variance map")
+        feature_dict["variance_map"] = fe.Features(np.array([variance_map]),
+                                                   np.array([[0]]).T,
+                                                   name="variance map")
 
     for name, features in feature_dict.iteritems():
         image_dir = path.join(out_path, "%s_images" % name)
