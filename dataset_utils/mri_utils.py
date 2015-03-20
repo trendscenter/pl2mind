@@ -217,7 +217,22 @@ def split_save_data(data, labels, train_percentage, out_dir):
     np.save(path.join(out_dir, "test_labels.npy"),
             [labels[i] for i in test_idx])
 
-def save_mask(data, out_dir, from_simtb=False):
+def save_simtb_mask(data, out_dir):
+    """
+    Saves a simtb mask (circle)
+    """
+    logger.info("Making simtb mask")
+    m, r, c, d = data.shape
+    assert r == c
+    mask = np.zeros((r, c, d))
+    i0 = j0 = .5 * r
+    for i in range(r):
+        for j in range(c):
+            if (i - i0)**2 + (j - j0)**2 <= r**2:
+                mask[i, j] = 1
+    return mask
+
+def save_mask(data, out_dir):
     """
     Find and save maks of data.
     """
@@ -228,7 +243,7 @@ def save_mask(data, out_dir, from_simtb=False):
 
     zero_freq = (data.reshape((m, r * c * d)) == 0).sum(1) * 1 / reduce(
         lambda x, y: x * y, data.shape[1:4])
-    if zero_freq.mean() > 0.2 and not from_simtb:
+    if zero_freq.mean() > 0.2:
         logger.info("Masked data found, deriving zeros from data zeros.")
         for freq in zero_freq:
             assert isinstance(freq, float), freq
@@ -297,7 +312,7 @@ def from_dir(source_directory, out_dir, args):
     """
     if is_simTBdir(source_directory):
         data, labels, sim_dict = load_simTB_data(source_directory)
-        mask = save_mask(data, out_dir, from_simtb=True)
+        mask = save_simtb_mask(data, out_dir, from_simtb=True)
     else:
         if args.h_pattern is not None or args.sz_pattern is not None:
             read_args = [patt for patt in (args.h_pattern, args.sz_pattern)
