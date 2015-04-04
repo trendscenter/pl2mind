@@ -26,7 +26,7 @@ class MRIInputHandler(object):
     def __init__(self):
         self.d = {}
 
-    def get_input_params(self, hyperparams):
+    def get_input_params(self, hyperparams, dataset_root="${PYLEARN2_NI_PATH}"):
         """
         Get the input parameters given data hyperparameters.
 
@@ -52,7 +52,7 @@ class MRIInputHandler(object):
             "Cannot variance normalize and unit normalize in the same direction"
         )
 
-        data_path = serial.preprocess("${PYLEARN2_NI_PATH}/" + dataset_name)
+        data_path = serial.preprocess(dataset_root + dataset_name)
 
         h = hash((data_class, variance_normalize, unit_normalize, demean))
 
@@ -65,7 +65,8 @@ class MRIInputHandler(object):
                                          variance_normalize=variance_normalize,
                                          demean=demean,
                                          even_input=even_input,
-                                         apply_mask=True)
+                                         apply_mask=True,
+                                         dataset_root=dataset_root)
                 input_dim = mri.X.shape[1]
                 variance_file_name = ("variance_map_transposed%s%s.npy"
                                       % ("_un" if unit_normalize else "",
@@ -83,7 +84,8 @@ class MRIInputHandler(object):
                                        demean=demean,
                                        variance_normalize=variance_normalize,
                                        even_input=even_input,
-                                       apply_mask=True)
+                                       apply_mask=True,
+                                       dataset_root=dataset_root)
                 variance_file_name = ("variance_map%s%s%s.npy"
                                       % ("_un" if unit_normalize else "",
                                          "_vn" if variance_normalize else "",

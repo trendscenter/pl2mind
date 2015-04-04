@@ -77,6 +77,43 @@ class ModelStructure(object):
     def get_ordered_list(self):
         return self.transformers + [self.model]
 
+    def get_name_dict(self):
+
+        name_dict = {}
+
+        class Namer(object):
+            def __init__(self):
+                self.d = {}
+
+            def get_index(self, key):
+                if not self.d.get(key, False):
+                    self.d[key] = 0
+                    return str(self.d[key])
+                else:
+                    self.d[key] += 1
+                    return str(self.d[key])
+
+            def __call__(self, model):
+                if isinstance(model, RBM):
+                    name = "RBM"
+                elif isinstance(model, DBN):
+                    name = "DBN"
+                elif isinstance(model, VAE):
+                    name = "VAE"
+                elif isinstance(model, NICE):
+                    name = "NICE"
+                elif isinstance(model, TransformerDataset):
+                    name = "transformer"
+                else:
+                    name = "Unknown"
+                return name + self.get_index(name)
+
+        namer = Namer()
+        for model in self.transformers + [self.model]:
+            name_dict[model] = namer(model)
+
+        return name_dict
+
     def get_graph(self):
         graph = dict()
 
@@ -104,39 +141,12 @@ class ModelStructure(object):
 
         return named_graph
 
-    def get_nx(self):
-        graph = self.get_named_graph()
-        G = nx.DiGraph()
-
-        models = self.get_ordered_list()
-        models = [str(type(m)).split(".")[-1][:-2]
-                  for m in [self.dataset] + models]
-        node_dict = dict(
-            (j, i) for i, j in enumerate(models)
-        )
-        G.add_nodes_from(enumerate(models))
-        pos = dict((i, (0, i)) for i, j in enumerate(models))
-
-        for k, (v1, v2) in graph.iteritems():
-            #if k == "D":
-            #    G.add_node(v1, shape="ellipse")
-            #elif "T" in k:
-            #    G.add_node(v1, shape="triangle")
-            G.add_edge(node_dict[v1], node_dict[v2])
-
-        return G
-
-    def save_graph(self, out_file):
-        plt.clf()
-        graph = self.get_nx()
-        nx.draw(graph)
-        plt.savefig(out_file)
-
 
 class Feature(object):
     def __init__(self, j):
         self.stats = {}
         self.match_indices = {}
+        self.relations = {}
         self.id = j
 
 
@@ -172,6 +182,7 @@ class Features(object):
             self.load_feature_stats(stat, value.eval())
 
         self.stats = {}
+        self.relations = {}
         self.load_stats()
         self.clean()
 
@@ -179,12 +190,20 @@ class Features(object):
         return self.f[key]
 
     def load_stats(self):
+        sm_means = (np.abs(self.spatial_maps).mean(axis=1) /
+                    np.abs(self.spatial_maps).mean())
+
+        sm_maxes = (np.abs(self.spatial_maps).max(axis=1) /
+                    np.abs(self.spatial_maps).max())
+
         self.stats.update(**dict(
-            sm_means=np.sort(np.abs(self.spatial_maps).mean(axis=1) /
-                             np.abs(self.spatial_maps).mean()).tolist(),
-            sm_maxes=np.sort(np.abs(self.spatial_maps).max(axis=1) /
-                             np.abs(self.spatial_maps).max()).tolist()
+            sm_means=np.sort(sm_means).tolist(),
+            sm_maxes=np.sort(sm_maxes).tolist()
         ))
+        self.load_feature_stats("mean_weight_prop",
+                               dict((k, sm_means[k]) for k in self.f.keys()))
+        self.load_feature_stats("max_weight_prop",
+                               dict((k, sm_maxes[k]) for k in self.f.keys()))
 
     def load_feature_stats(self, stat_name, value):
         for k in self.f.keys():
@@ -222,14 +241,18 @@ class Features(object):
                 edges=act_edges.tolist() if tolist else act_edges
             )
 
-    def make_graph(self, stat, absolute_value=True):
-        assert stat in self.stat_names + ["spatial_maps", "activations"]
+    def get_nodes(self):
         nodes = [
             dict(
                 name="%d" % f.id
             )
             for f in self.f.values()
         ]
+        return nodes
+
+    def get_links(self, stat, absolute_value=True, other=None):
+        assert stat in self.stat_names + ["spatial_maps", "activations"]
+
 
         if stat == "spatial_maps":
             corrs = np.corrcoef(self.spatial_maps,
@@ -240,9 +263,12 @@ class Features(object):
                                 self.spatial_maps)[len(self.f):, :len(self.f)]
         else:
             raise NotImplementedError()
+
         links = []
+
         if absolute_value:
             corrs = np.abs(corrs)
+
         for i in xrange(len(self.f)):
             for j in xrange(i + 1, len(self.f)):
                 links.append(
@@ -252,10 +278,17 @@ class Features(object):
                         value=corrs[i, j]
                     )
                 )
-        return dict(
-            nodes=nodes,
-            links=links
-        )
+
+        return links
+
+    def relate(self, other_features, F):
+        relation = F.eval()
+        relation = relation / max(abs(relation.min()), relation.max())
+        idx = [f.id for f in other_features.f.values()]
+        relation = relation[:, idx]
+        self.relations[other_features.name] = relation.tolist()
+        for k, f in self.f.iteritems():
+            f.relations[other_features.name] = relation[k].tolist()
 
 
 def match_parameters(p, q, method="munkres", discard_misses=False):
@@ -343,6 +376,7 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
 
     ms = ModelStructure(model, dataset)
     models = ms.get_ordered_list()
+    name_dict = ms.get_name_dict()
 
     logger.info("Getting activations for model of type %s"
                 % (type(model)))
@@ -353,9 +387,12 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
     for i, model in enumerate(models):
         logger.info("Passing data through %s" % model)
         F, stats = get_features(model)
-        #if isinstance(model, DBN):
-        #    F = downward_message(F, model)
-        for model_below in models[:i]:
+
+        downward_relations = {}
+        for j in range(i - 1, -1, -1):
+            model_below = models[j]
+            features_below = feature_dict[name_dict[model_below]]
+            downward_relations[name_dict[model_below]] = F
             F = downward_message(F, model_below)
         X = upward_message(X, model)
 
@@ -379,9 +416,15 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
             else:
                 raise ValueError("Axis %s for variance map not supported"
                                  % axis)
-        f = Features(sms, acts, transposed=ms.transposed(), **stats)
+        f = Features(sms, acts, transposed=ms.transposed(),
+                     name=name_dict[model], **stats)
 
-        feature_dict[stats["name"]] = f
+        for j in range(i - 1, -1, -1):
+            model_below = models[j]
+            f.relate(feature_dict[name_dict[model_below]],
+                     downward_relations[name_dict[model_below]])
+
+        feature_dict[name_dict[model]] = f
 
     return feature_dict
 
@@ -434,7 +477,7 @@ def get_features(model, max_features=100):
 
         features = 1 - (0.5 * (1 + T.erf((mu0 - mu1) / (
             T.exp(log_sigma1) * sqrt(2)))))
-        stats = dict(name="vae", m=means[idx], s=sigmas[idx], idx=idx)
+        stats = dict(m=means[idx], s=sigmas[idx], idx=idx)
 
     elif isinstance(model, NICE):
         logger.info("Getting features for NICE model")
@@ -459,7 +502,7 @@ def get_features(model, max_features=100):
         mean_features = model.encoder.inv_fprop(means_matrix)
 
         features = (model.encoder.inv_fprop(2 * sigmas_matrix) - mean_features)
-        stats = dict(name="nice", s=sigmas[idx], idx=idx)
+        stats = dict(s=sigmas[idx], idx=idx)
 
     elif isinstance(model, RBM):
         features = model.hidden_layer.transformer.get_params()[0].T
@@ -468,12 +511,12 @@ def get_features(model, max_features=100):
         #    X -= model.visible_layer.mu
         #    features = X.T.dot(features)
 
-        stats = dict(name="rbm")
+        stats = dict()
 
     elif isinstance(model, DBN):
         features, _ = get_features(model.top_rbm,
                                    max_features=max_features)
-        stats = dict(name="dbn")
+        stats = dict()
 
     else:
         raise NotImplementedError("No feature extraction for mode %s"

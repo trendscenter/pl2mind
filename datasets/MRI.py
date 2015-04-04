@@ -152,13 +152,16 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
             X -= X.mean()
 
         if self.demean:
+            if self.demean is True:
+                self.demean = 1
+            self.demean -= 1
             logger.info("Demeaning data along axis %s" % self.demean)
             if isinstance(self.demean, tuple):
                 self.demean = self.demean[0]
             assert isinstance(self.demean, int), self.demean
-            if self.demean == 1:
+            if self.demean == 0:
                 X -= X.mean(axis=0)
-            elif self.demean == 2:
+            elif self.demean == 1:
                 X = (X.T - X.mean(axis=1)).T
             else:
                 raise NotImplementedError("Axis %s not supported. Must be"
@@ -166,15 +169,18 @@ class MRI(dense_design_matrix.DenseDesignMatrix):
                                           % self.demean)
 
         if self.variance_normalize:
+            if self.variance_normalize is True:
+                self.variance_normalize = 1
+            self.variance_normalize -= 1
             logger.info("Variance normalizing data along axis %s"
                         % self.variance_normalize)
             if isinstance(self.variance_normalize, tuple):
                 self.variance_normalize = self.variance_normalize[0]
             assert isinstance(self.variance_normalize, int)
-            if self.variance_normalize == 1:
+            if self.variance_normalize == 0:
                 self.variance_map = (0, X.std(axis=0))
                 X /= X.std(axis=0)
-            elif self.variance_normalize == 2:
+            elif self.variance_normalize == 1:
                 self.variance_map = (1, X.std(axis=1))
                 X = (X.T / X.std(axis=1)).T
             else:

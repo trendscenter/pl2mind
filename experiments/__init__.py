@@ -51,9 +51,6 @@ import time
 import zmq
 
 
-logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
-
-
 class MetaLogHandler(object):
     """
     Handler for module logs.
@@ -132,9 +129,17 @@ class LogHandler(object):
             "log_stream": ""
             }
 
-        self.logger = logger
+        self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
+        log_file = path.join(out_path, "model.log")
+        fh = logging.FileHandler(log_file, mode="w")
+        fh.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(fmt="%(asctime)s:%(levelname)s:"
+                                  "%(module)s:%(message)s")
+        fh.setFormatter(formatter)
+        self.logger.addHandler(fh)
         h = logging.StreamHandler(MetaLogHandler(self.d))
         h.setLevel(logging.DEBUG)
+        h.setFormatter(formatter)
         self.logger.addHandler(h)
         self.write_json()
 
@@ -311,7 +316,7 @@ class LogHandler(object):
 
     def write(self, message):
         """
-        SteamHandle call.
+        StreamHandle call.
         Necessary as a StreamHandle object. Where hijack occures.
 
         Parameters
@@ -365,9 +370,8 @@ class ModelProcessor(mp.Process):
         Shared boolean to indicate to log handler that processor is running.
     """
     def __init__(self, experiment, checkpoint, ep,
-                 flag, last_processed, logger):
+                 flag, last_processed, out_path):
         self.__dict__.update(locals())
-        self.logger.setLevel(logging.DEBUG)
         self.socket = None
 
         self.out_path = "/".join(checkpoint.split("/")[:-1])
@@ -378,11 +382,17 @@ class ModelProcessor(mp.Process):
         self.persistent = False
         super(ModelProcessor, self).__init__()
 
+        self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
+
     def run(self):
-        while True:
-            message = self.ep.recv()
-            if message is None:
-                return
+        self.br = False
+        def sig_handler(signum, frame):
+            self.br = True
+            return
+
+        self.logger.info("Model processor is now running")
+        while not self.br:
+            time.sleep(10 * 60);
             self.logger.info("Processing")
             self.flag.value = True
             try:
@@ -401,6 +411,7 @@ class ModelProcessor(mp.Process):
                 self.logger.exception(e)
                 self.ep.send("FAILED")
             self.flag.value = False
+        self.logger.info("Model processor has been killed successfully.")
 
 
 class StatProcessor(mp.Process):
@@ -416,14 +427,17 @@ class StatProcessor(mp.Process):
     cpu: mp.Value
         Shared integer with log handler.
     """
-    def __init__(self, pid, mem, cpu, logger, length=100):
+    def __init__(self, pid, mem, cpu, out_path, length=100):
         self.__dict__.update(locals())
         self.cpus = []
         self.mems = []
         self.br = False
         super(StatProcessor, self).__init__()
 
+        self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
+
     def run(self):
+        self.logger.info("Stat processor is now running")
         p = psutil.Process(self.pid);
 
         def sig_handler(signum, frame):
@@ -448,7 +462,8 @@ class StatProcessor(mp.Process):
                 raise ValueError()
             self.mems.append(p.get_memory_percent())
             self.mem.value = np.mean(self.mems)
-        self.logger.info("Server is dying (This is good)")
+
+        self.logger.info("Stat processor has been killed successfully")
 
 
 def server(pid, ep):
@@ -482,10 +497,6 @@ def server(pid, ep):
             p = psutil.Process(pid)
             p.send_signal(signal.SIGINT)
             return
-        elif message == "PROCESS":
-            ep.send(True)
-            message = ep.recv()
-            socket.send(message)
 
 def set_hyper_parameters(hyper_parameters, **kwargs):
     """
@@ -510,7 +521,8 @@ def set_hyper_parameters(hyper_parameters, **kwargs):
                 entry[split_keys[-1]] = value
 
 def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
-                   dbdescr=None, job_id=None, **kwargs):
+                   dbdescr=None, job_id=None, debug=False,
+                   dataset_root="${PYLEARN2_NI_PATH}", **kwargs):
     """
     Experiment function.
     Used by jobman to run jobs. Must be loaded externally.
@@ -552,15 +564,17 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     monitor.log.addHandler(h)
 
     try:
-        # HACK TODO: fix this. For some reason knex formatted strings are sometimes
-        # Getting in.
+        # HACK TODO: fix this. For some reason knex formatted strings are
+        # sometimes getting in.
         hyper_parameters = translate(hyper_parameters, "pylearn2")
 
         # Use the input hander to get input information.
         ih = input_handler.MRIInputHandler()
-        input_dim, variance_map_file = ih.get_input_params(hyper_parameters)
+        input_dim, variance_map_file = ih.get_input_params(
+            hyper_parameters, dataset_root=dataset_root)
         if hyper_parameters["nvis"] is None:
             hyper_parameters["nvis"] = input_dim
+
         # Hack for NICE. Need to rethink inner-dependencies of some model params.
         if ("encoder" in hyper_parameters.keys()
             and "nvis" in hyper_parameters["encoder"].keys()
@@ -621,7 +635,8 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         yaml_template = open(experiment.yaml_file).read()
         yaml = yaml_template % hyper_parameters
         train_object = yaml_parse.load(yaml)
-
+        if debug:
+            return train_object
         lh.write_json()
 
         lh.logger.info("Seting up subprocesses")
@@ -635,12 +650,12 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
         lh.logger.info("Starting model processor")
         model_processor = ModelProcessor(experiment, train_object.save_path,
                                          mp_ep, processing_flag, last_processed,
-                                         lh.logger)
+                                         out_path)
         model_processor.start()
         lh.logger.info("Model processor started")
 
         lh.logger.info("Starting stat processor")
-        stat_processor = StatProcessor(pid, mem, cpu, lh.logger)
+        stat_processor = StatProcessor(pid, mem, cpu, out_path)
         stat_processor.start()
         lh.logger.info("Stat processor started")
 
@@ -720,40 +735,36 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
     lh.finish("COMPLETED")
     return
 
+def get_desc(jobargs):
+    return ("postgres://%(user)s@%(host)s:"
+            "%(port)d/%(database)s?table=%(table)s"
+            % {"user": jobargs["user"],
+            "host": jobargs["host"],
+            "port": jobargs["port"],
+            "database": jobargs["database"],
+            "table": jobargs["table"],
+            })
+
 def run_jobman_from_sql(jobargs):
     """
     Runs muliple jobs on postgresql database table.
     """
-    dbdescr = ("postgres://%(user)s@%(host)s:"
-               "%(port)d/%(database)s?table=%(table)s"
-               % {"user": jobargs.user,
-                  "host": jobargs.host,
-                  "port": jobargs.port,
-                  "database": jobargs.database,
-                  "table": jobargs.table,
-                  })
+    dbdescr = get_desc(jobargs)
 
     command = ("/export/mialab/users/mindgroup/Code/jobman/bin/jobman sql %s ."
                % dbdescr)
     user = os.getenv("USER")
-    dbi = DBILocal([command] * jobargs.n_proc,
+    dbi = DBILocal([command] * jobargs["n_proc"],
         **dict(log_dir=("/export/mialab/users/mindgroup/Experiments/%s/LOGS"
                         % user)))
-    dbi.nb_proc = jobargs.n_proc
+    dbi.nb_proc = jobargs["n_proc"]
     dbi.run()
 
 def run_one_jobman(jobargs):
     """
     Run a single job from postgresql database table.
     """
-    dbdescr = ("postgres://%(user)s@%(host)s:"
-               "%(port)d/%(database)s?table=%(table)s"
-               % {"user": jobargs.user,
-                  "host": jobargs.host,
-                  "port": jobargs.port,
-                  "database": jobargs.database,
-                  "table": jobargs.table,
-                  })
+    dbdescr = get_desc(jobargs)
     user = os.getenv("USER")
     options = optparse.Values(dict(modules=None,
                                    n=1,
@@ -767,14 +778,7 @@ def jobman_status(jobargs):
     """
     Print status of jobs in postgres database table.
     """
-    db = api0.open_db("postgres://%(user)s@%(host)s:"
-                      "%(port)d/%(database)s?table=%(table)s"
-                      % {"user": jobargs.user,
-                         "host": jobargs.host,
-                         "port": jobargs.port,
-                         "database": jobargs.database,
-                         "table": jobargs.table,
-                         })
+    db = get_desc(jobargs)
     for job in db.__iter__():
         print "-------------------"
         print "Job: %d" % job.id
@@ -783,14 +787,7 @@ def jobman_status(jobargs):
             print "\t%s\t%r" % (k, job[k])
 
 def open_db(jobargs):
-    dbdescr = ("postgres://%(user)s@%(host)s:"
-               "%(port)d/%(database)s?table=%(table)s"
-               % {"user": jobargs.user,
-                  "host": jobargs.host,
-                  "port": jobargs.port,
-                  "database": jobargs.database,
-                  "table": jobargs.table,
-                  })
+    dbdescr = get_desc(jobargs)
     db = api0.open_db(dbdescr)
     return db
 
@@ -800,7 +797,7 @@ def set_status_jobman(jobargs):
     """
 
     db = open_db(jobargs)
-    job_id = jobargs.job_id
+    job_id = jobargs["job_id"]
     if job_id.isdigit():
         job = db.get(job_id)
         job["jobman.status"] = 0
@@ -812,14 +809,7 @@ def clear_jobman(jobargs):
     """
     Clear jobs in postgresql database table.
     """
-    db = api0.open_db("postgres://%(user)s@%(host)s:"
-                      "%(port)d/%(database)s?table=%(table)s"
-                      % {"user": jobargs.user,
-                         "host": jobargs.host,
-                         "port": jobargs.port,
-                         "database": jobargs.database,
-                         "table": jobargs.table,
-                      })
+    db = get_desc(jobargs)
     for job in db.__iter__():
         job.delete()
 
@@ -870,14 +860,7 @@ def load_experiments_jobman(experiment_module, jobargs):
     """
     Load jobs from experiment onto postgresql database table.
     """
-    dbdescr = ("postgres://%(user)s@%(host)s:"
-               "%(port)d/%(database)s?table=%(table)s"
-               % {"user": jobargs.user,
-                  "host": jobargs.host,
-                  "port": jobargs.port,
-                  "database": jobargs.database,
-                  "table": jobargs.table,
-                  })
+    dbdescr = get_desc(jobargs)
     db = api0.open_db(dbdescr)
 
     experiment = imp.load_source("module.name", experiment_module)
@@ -886,14 +869,14 @@ def load_experiments_jobman(experiment_module, jobargs):
         state = DD()
         set_hyper_parameters(hyperparams, **dict((k, v) for k, v in items))
         state.hyperparams = translate(hyperparams, "knex")
-        state["out&path"] = path.abspath(jobargs.out_path)
+        state["out&path"] = path.abspath(jobargs["out_path"])
         state["experiment&module"] = path.abspath(experiment_module)
         state["dbdescr"] = dbdescr
 
         sql.insert_job(run_experiment_jobman,
                        flatten(state),
                        db)
-    db.createView("%s" % jobargs.table)
+    db.createView("%s" % jobargs["table"])
 
 def run_experiment_jobman(state, channel):
     """
