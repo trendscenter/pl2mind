@@ -64,7 +64,7 @@ def save_simtb_spatial_maps(dataset, features, out_path):
     out_files = [path.join(out_path, "%d.png" % feature.id)
                  for feature in features]
 
-    p = mp.Pool(len(features))
+    p = mp.Pool(30)
     args_iter = itertools.izip(spatial_maps, out_files)
     p.map(save_helper, args_iter)
 

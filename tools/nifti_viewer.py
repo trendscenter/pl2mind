@@ -10,6 +10,7 @@ from matplotlib import pylab as plt
 from matplotlib import rc
 import multiprocessing as mp
 
+import nipy
 from nipy import load_image
 from nipy.core.api import xyz_affine
 from nipy.labs.viz import plot_map
@@ -47,10 +48,13 @@ cdict = {"red": ((0.0, 0.0, 0.0),
 
 cmap = matplotlib.colors.LinearSegmentedColormap("my_colormap", cdict, 256)
 
-def save_image(nifti_file, anat, cluster_dict, out_path, f, image_threshold=1,
-               texcol=1, bgcol=0, iscale=2):
-    nifti = load_image(nifti_file)
-    feature = nifti.get_data()
+def save_image(nifti, anat, cluster_dict, out_path, f, image_threshold=2,
+               texcol=1, bgcol=0, iscale=2, text=None, **kwargs):
+    if isinstance(nifti, str):
+        nifti = load_image(nifti)
+        feature = nifti.get_data()
+    elif isinstance(nifti, nipy.core.image.image.Image):
+        feature = nifti.get_data()
     font = {"size":8}
     rc("font", **font)
 
@@ -62,12 +66,18 @@ def save_image(nifti_file, anat, cluster_dict, out_path, f, image_threshold=1,
     feature /= feature.std()
     imax = np.max(np.absolute(feature))
     imin = -imax
-    imshow_args = {"vmax": imax, "vmin": imin}
+    imshow_args = dict(
+        vmax=imax,
+        vmin=imin,
+        alpha=0.7
+    )
 
     coords = ([-coords[0], -coords[1], coords[2]])
 
     #ax = fig.add_subplot(1, 1, 1)
     plt.axis("off")
+    plt.text(0.05, 0.8, text, horizontalalignment="center",
+             color=(texcol, texcol, texcol))
 
     try:
         plot_map(feature,
@@ -84,10 +94,6 @@ def save_image(nifti_file, anat, cluster_dict, out_path, f, image_threshold=1,
         logger.exception(e)
         return
 
-    plt.text(0.05, 0.8, str(f),
-             horizontalalignment="center",
-             color=(texcol, texcol, texcol))
-
     plt.savefig(out_path, transparent=True, facecolor=(bgcol, bgcol, bgcol))
 
 def save_helper(args):
@@ -95,7 +101,7 @@ def save_helper(args):
 
 def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
     logger.info("Saving images to %s" % out_dir)
-    p = mp.Pool(len(nifti_files))
+    p = mp.Pool(30)
     idx = [int(f.split("/")[-1].split(".")[0]) for f in nifti_files]
     args_iter = itertools.izip(nifti_files,
                                itertools.repeat(anat),

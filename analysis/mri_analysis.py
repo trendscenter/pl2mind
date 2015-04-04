@@ -11,6 +11,7 @@ __email__ = "dhjelm@mrn.org"
 __maintainer__ = "Devon Hjelm"
 
 import argparse
+import copy
 import json
 import logging
 from math import log
@@ -38,7 +39,6 @@ from pl2mind.tools import nifti_viewer
 
 from pylearn2.config import yaml_parse
 from pylearn2.datasets.transformer_dataset import TransformerDataset
-from pylearn2.neuroimaging_utils.datasets.MRI import MRI as MRI_old
 from pylearn2.utils import serial
 from pylearn2.utils import sharedX
 
@@ -240,6 +240,7 @@ def main(model, out_path=None, prefix=None, **anal_args):
                 image_type="mri",
                 index=f.id,
                 hists=f.hists,
+                relations=f.relations,
                 match_indices=f.match_indices
             )
             fd.update(**f.stats)
@@ -249,11 +250,19 @@ def main(model, out_path=None, prefix=None, **anal_args):
         anal_dict[name] = dict(
             name=name,
             image_dir=image_dir,
-            features=fds
+            features=fds,
+            graphs=dict(
+                nodes=features.get_nodes(),
+                links=dict(
+                    spatial_maps=features.get_links("spatial_maps"),
+                    activations=features.get_links("activations")
+                )
+            ),
+            relations=features.relations,
+            stats=features.stats
         )
 
     ms = fe.ModelStructure(model, dataset)
-    #anal_dict["graph"] = nx.node_link_data(fe.get_nx())
 
     json_file = path.join(out_path, "analysis.json")
     with open(json_file, "w") as f:
@@ -283,6 +292,7 @@ def make_argument_parser():
     parser.add_argument("-m", "--max_features", default=100)
     parser.add_argument("-d", "--dataset_root", default=None,
                         help="If specified, use another user's data root")
+    parser.add_argument("--multiply_variance", action="store_true")
     parser.add_argument("-b", "--base_nifti", default=None)
     return parser
 
@@ -292,13 +302,10 @@ if __name__ == "__main__":
     if args.verbose:
         logger.setLevel(logging.DEBUG)
 
-    anal_args = dict(
-        zscore=args.zscore,
-        target_stat=args.target_stat,
-        max_features=args.max_features,
-        dataset_root=args.dataset_root,
-        base_nifti=args.base_nifti,
-        image_threshold=args.image_threshold
-    )
+    anal_args = copy.deepcopy(vars(args))
+    anal_args.pop("verbose")
+    anal_args.pop("out_dir")
+    anal_args.pop("prefix")
+    anal_args.pop("model_path")
 
     main(args.model_path, args.out_dir, args.prefix, **anal_args)
