@@ -214,6 +214,7 @@ $(document).ready(function () {
     }
 
     function get_rois(json) {
+	console.log(json);
         for (var job in json) {
             console.log("Getting " + json[job]["out_path"] + "/model.json");
             $.ajax({
