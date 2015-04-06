@@ -1,5 +1,5 @@
 # pl2mind
-Deepmind tools for Pylearn2 
+Neuroimaging extension for Pylearn2 
 
 pl2mind is an extension for Pylearn2 specifically for neuroimaging and other brain data applications.
 It contains unique datasets directed to incorporating 3d brain data into deep models implemented in Pylearn2.
