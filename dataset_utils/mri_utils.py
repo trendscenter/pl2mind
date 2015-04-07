@@ -13,6 +13,7 @@ __maintainer__ = "Devon Hjelm"
 import argparse
 from glob import glob
 import logging
+import nibabel as nib
 from nipy import save_image, load_image
 import numpy as np
 import os
@@ -124,7 +125,8 @@ def read_niftis(file_lists):
     for i, fl in enumerate(file_lists):
         assert len([j for j in labels if j == i]) == len(fl) * t
 
-    for i, f in enumerate(item for sublist in file_lists for item in sublist):
+    flattened_list = [item for sublist in file_lists for item in sublist]
+    for i, f in enumerate(flattened_list):
         logger.info("Loading subject from file: %s%s" % (f, '' * 30))
 
         nifti = load_image(f)
@@ -141,7 +143,14 @@ def read_niftis(file_lists):
     logger.info("\rLoading subject from file: %s\n" % ('DONE' + " "*30))
     if data.shape[0] != len(labels):
         raise ValueError("Data and labels have different number of samples.")
-    return data, labels, nifti
+
+    base_file = flattened_list[0]
+    # Use nibabel in case we need to convert from 4d to 3d
+    base = nib.load(base_file)
+    if len(base.shape) == 4:
+        base = nib.four_to_three(base)[0]
+
+    return data, labels, base
 
 def test_distribution(data, mask=None):
     logger.info("Testing distribution.")
@@ -191,8 +200,6 @@ def split_save_data(data, labels, train_percentage, out_dir):
     out_dir: string
         Output directory.
     """
-
-
 
     number_subjects = data.shape[0]
     subject_idx = range(number_subjects)
@@ -322,7 +329,7 @@ def from_dir(source_directory, out_dir, args):
         file_lists = pull_niftis(source_directory, *read_args)
         data, labels, base = read_niftis(file_lists)
         sim_dict = None
-        save_image(base, path.join(out_dir, "base.nii"))
+        nib.save(base, path.join(out_dir, "base.nii"))
         mask = save_mask(data, out_dir)
 
     if args.verbose:
@@ -360,7 +367,7 @@ def from_file(file_path, out_dir, args):
     file_lists = read_file_list(file_path)
     data, labels, base = read_niftis(file_lists)
 
-    save_image(base, path.join(out_dir, "base.nii"))
+    nib.save(base, path.join(out_dir, "base.nii"))
 
     mask = save_mask(data, out_dir)
     if args.verbose:
@@ -383,7 +390,7 @@ def from_patterns(file_path, out_dir, args):
         file_lists.append(file_list)
     data, labels, base = read_niftis(file_lists)
 
-    save_image(base, path.join(out_dir, "base.nii"))
+    nib.save(base, path.join(out_dir, "base.nii"))
 
     mask = save_mask(data, out_dir)
     if args.verbose:

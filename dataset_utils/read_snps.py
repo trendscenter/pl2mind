@@ -18,13 +18,13 @@ from os import listdir
 from os import path
 import random
 import re
+from pl2mind import logger
 from pylearn2.utils import serial
 import sys
 import warnings
 
 
-logging.basicConfig(format="[%(levelname)s]:%(message)s")
-logger = logging.getLogger(__name__)
+logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
 
 def make_argument_parser():
     """
