@@ -216,10 +216,7 @@ def main(model, out_path=None, prefix=None, **anal_args):
 
     logger.info("Getting features")
     feature_dict = fe.extract_features(model, **anal_args)
-
-    logger.info("Getting features")
-    feature_dict = fe.extract_features(model, **anal_args)
-    dataset = fe.resolve_dataset(model, **anal_args)
+    dataset = feature_dict.pop("dataset")
     if isinstance(dataset, TransformerDataset):
         dataset = dataset.raw
 

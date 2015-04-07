@@ -353,13 +353,14 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
                      multiply_variance=False, **kwargs):
     """
     Extracts the features given a number of model types.
+
     Included are special methods for VAE and NICE.
     Also if the data is transposed, the appropriate matrix multiplication of
     data x features is used.
 
     Parameters
     ----------
-    model: pylearn2 Model class.
+    model: pylearn2 Model class
         Model from which to extract features.
     dataset: pylearn2 Dataset class.
         Dataset to process transposed features.
@@ -368,7 +369,7 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
 
     Returns
     -------
-    features: array-like.
+    features: array_like.
     """
 
     logger.info("Extracting dataset")
@@ -383,7 +384,7 @@ def extract_features(model, dataset_root=None, zscore=False, max_features=100,
     data = ms.dataset.get_design_matrix()
     X = sharedX(data)
 
-    feature_dict = {}
+    feature_dict = {"dataset": dataset}
     for i, model in enumerate(models):
         logger.info("Passing data through %s" % model)
         F, stats = get_features(model)
