@@ -131,16 +131,19 @@ class LogHandler(object):
 
         self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
         log_file = path.join(out_path, "model.log")
+        formatter = logging.Formatter(fmt="%(asctime)s:%(levelname)s:"
+                                      "%(module)s:%(message)s")
+
         fh = logging.FileHandler(log_file, mode="w")
         fh.setLevel(logging.DEBUG)
-        formatter = logging.Formatter(fmt="%(asctime)s:%(levelname)s:"
-                                  "%(module)s:%(message)s")
         fh.setFormatter(formatter)
         self.logger.addHandler(fh)
+
         h = logging.StreamHandler(MetaLogHandler(self.d))
         h.setLevel(logging.DEBUG)
         h.setFormatter(formatter)
         self.logger.addHandler(h)
+
         self.write_json()
 
     def update(self, **kwargs):
@@ -370,7 +373,7 @@ class ModelProcessor(mp.Process):
         Shared boolean to indicate to log handler that processor is running.
     """
     def __init__(self, experiment, checkpoint, ep,
-                 flag, last_processed, out_path):
+                 flag, last_processed):
         self.__dict__.update(locals())
         self.socket = None
 
@@ -382,7 +385,7 @@ class ModelProcessor(mp.Process):
         self.persistent = False
         super(ModelProcessor, self).__init__()
 
-        self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
+        self.logger = logger.setup_custom_logger("processor", logging.DEBUG)
 
     def run(self):
         self.br = False
@@ -392,7 +395,7 @@ class ModelProcessor(mp.Process):
 
         self.logger.info("Model processor is now running")
         while not self.br:
-            time.sleep(10 * 60);
+            time.sleep(5 * 60);
             self.logger.info("Processing")
             self.flag.value = True
             try:
@@ -427,14 +430,14 @@ class StatProcessor(mp.Process):
     cpu: mp.Value
         Shared integer with log handler.
     """
-    def __init__(self, pid, mem, cpu, out_path, length=100):
+    def __init__(self, pid, mem, cpu, length=100):
         self.__dict__.update(locals())
         self.cpus = []
         self.mems = []
         self.br = False
         super(StatProcessor, self).__init__()
 
-        self.logger = logger.setup_custom_logger("pl2mind", logging.DEBUG)
+        self.logger = logger.setup_custom_logger("stats", logging.DEBUG)
 
     def run(self):
         self.logger.info("Stat processor is now running")
@@ -649,13 +652,12 @@ def run_experiment(experiment, hyper_parameters=None, ask=True, keep=False,
 
         lh.logger.info("Starting model processor")
         model_processor = ModelProcessor(experiment, train_object.save_path,
-                                         mp_ep, processing_flag, last_processed,
-                                         out_path)
+                                         mp_ep, processing_flag, last_processed)
         model_processor.start()
         lh.logger.info("Model processor started")
 
         lh.logger.info("Starting stat processor")
-        stat_processor = StatProcessor(pid, mem, cpu, out_path)
+        stat_processor = StatProcessor(pid, mem, cpu)
         stat_processor.start()
         lh.logger.info("Stat processor started")
 

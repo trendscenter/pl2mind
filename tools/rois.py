@@ -103,7 +103,6 @@ def find_clusters_from_3D(fnifti, thr):
     -------
     cluster: a list of floats
     """
-
     cmd = ("3dclust "
            "-1Dformat -quiet -nosum -2thresh -2 %.2f "
            "-dxyz=1 2 80 2>/dev/null" % thr)
@@ -144,7 +143,7 @@ def find_clusters_from_4D(fnifti, i, thr):
            "-1Dformat -quiet -nosum -1dindex %d -1tindex %d -2thresh -2 %.2f "
            "-dxyz=1 2 80 2>/dev/null" %
            (i, i, thr))
-    awk = "awk \"{ print $1\"\t\"$2\"\t\"$3\"\t\"$4\"\t\"$5\"\t\"$6\"\t\"$11\"\t\"$14\"\t\"$15\"\t\"$16}\""
+    awk = "awk '{ print $1\"\t\"$2\"\t\"$3\"\t\"$4\"\t\"$5\"\t\"$6\"\t\"$11\"\t\"$14\"\t\"$15\"\t\"$16}'"
     cmdline = cmd + " '%s'| " % fnifti + awk
     proc = subprocess.Popen(cmdline, stdout=subprocess.PIPE, shell=True)
     (out, err) = proc.communicate()
@@ -252,7 +251,7 @@ def find_region_names(coords):
 
 def get_cluster_info(clusters):
     if len(clusters) == 0:
-        logger.warn("No clusters found for feature %d" % i)
+        logger.warn("No clusters found for feature")
         return {}
 
     cluster_dict = {}
@@ -285,7 +284,7 @@ def get_cluster_info(clusters):
         cluster["int_prop"] = (cluster["mean_intensity"] * cluster["volume"] /
                                intensity_sum)
 
-        if cluster["int_prop"] > max_int_prop or np.isnan(int_prop): # why nan?
+        if cluster["int_prop"] > max_int_prop or np.isnan(cluster["int_prop"]): # why nan?
             max_int_prop = cluster["int_prop"]
             top_clust = cluster
 
@@ -338,6 +337,8 @@ def find_rois(fnifti, thr):
                                    itertools.repeat(thr),
                                    itertools.repeat(roi_dict))
         p.map(worker_helper, args_iter)
+        p.close()
+        p.join()
         roi_dict = dict(roi_dict)
     else:
         raise NotImplementedError("Type %s not supported" % type(fnifti))

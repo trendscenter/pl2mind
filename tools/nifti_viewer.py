@@ -110,6 +110,8 @@ def save_images(nifti_files, anat, roi_dict, out_dir, **kwargs):
                                idx)
 
     p.map(save_helper, args_iter)
+    p.close()
+    p.join()
 
 def montage(nifti, anat, roi_dict, thr=2,
             fig=None, out_file=None, feature_dict=None,
